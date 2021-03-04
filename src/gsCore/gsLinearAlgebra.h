@@ -28,7 +28,7 @@
 #define EIGEN_MATRIXBASE_PLUGIN <gsMatrix/gsMatrixAddons.h>
 #include <gsMatrix/gsEigenDeclarations.h>
 
-#include <Eigen/Core>
+#include <gsEigen/Core>
 
 #if defined(GISMO_WITH_MPFR)
 #include <unsupported/Eigen/MPRealSupport>
@@ -38,9 +38,9 @@
 #include <unsupported/Eigen/MPQClassSupport>
 #endif
 
-#include <Eigen/Dense>
-#include <Eigen/Sparse>
-#include <Eigen/StdVector>
+#include <gsEigen/Dense>
+#include <gsEigen/Sparse>
+#include <gsEigen/StdVector>
 
 // Extra Eigen code
 #include <gsMatrix/Adjugate.h>
@@ -49,27 +49,27 @@
 //#include <gsMatrix/RowSelection.h>
 
 #ifdef GISMO_WITH_SUPERLU
-#include <Eigen/SuperLUSupport>
+#include <gsEigen/SuperLUSupport>
 #endif
 
 #ifdef GISMO_WITH_PARDISO
-#include <Eigen/PardisoSupport>
+#include <gsEigen/PardisoSupport>
 #endif
 
 #ifdef GISMO_WITH_PASTIX
-#include <Eigen/PaStiXSupport>
+#include <gsEigen/PaStiXSupport>
 #endif
 
 // sparsesuite
-//#include <Eigen/UmfPackSupport>
-//#include <Eigen/SPQRSupport>
-//#include <Eigen/CholmodSupport>
+//#include <gsEigen/UmfPackSupport>
+//#include <gsEigen/SPQRSupport>
+//#include <gsEigen/CholmodSupport>
 
 // METIS
-//#include <Eigen/MetisSupport>
+//#include <gsEigen/MetisSupport>
 
 // PaStiX
-//#include <Eigen/PaStiXSupport>
+//#include <gsEigen/PaStiXSupport>
 
 namespace gismo
 {
@@ -199,3 +199,7 @@ public:
 #include <gsMatrix/gsSparseVector.h>
 #include <gsMatrix/gsSparseSolver.h>
 #include <gsMatrix/gsPoint.h>
+
+#undef EIGEN_MATRIXBASE_PLUGIN
+
+//#define GS_EIGEN_MAKE_ALIGNED_OPERATOR_NEW_IF EIGEN_MAKE_ALIGNED_OPERATOR_NEW_IF

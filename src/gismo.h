@@ -36,6 +36,8 @@ namespace internal
 
 }
 
+#define Eigen gismo::gsEigen //renaming and wrapping Eigen namespace
+#include<gsMatrix/gsUndefEigenGuards.h>
 
 /* ----------- Core ----------- */
 // #include <gsCore/gsConfig.h>
@@ -212,5 +214,8 @@ namespace internal
 #  endif
 #endif
 */
+
+#include<gsMatrix/gsUndefEigenGuards.h>
+#undef Eigen
 
 #endif // __GISMO_H__
