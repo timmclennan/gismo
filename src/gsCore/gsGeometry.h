@@ -429,8 +429,8 @@ public:
     void rotate(T angle, const gsVector<T,3> & axis )
     {
         assert( geoDim() == 3 );
-        Eigen::Transform<T,3,Eigen::Affine> 
-            rot( Eigen::AngleAxis<T> (angle,axis.normalized()) );
+        gsEigen::Transform<T,3,gsEigen::Affine>
+            rot( gsEigen::AngleAxis<T> (angle,axis.normalized()) );
         // To do: Simpler way to use transforms ?
         this->m_coefs = (this->m_coefs.rowwise().homogeneous() * 
                          rot.matrix().transpose() ).leftCols(3) ;
@@ -440,7 +440,7 @@ public:
     void rotate(T angle)
     {
         GISMO_ASSERT( geoDim() == 2, "Only for 2D");
-        Eigen::Rotation2D<T> rot(angle);
+        gsEigen::Rotation2D<T> rot(angle);
         this->m_coefs *= rot.matrix().transpose();
     }
 
@@ -514,7 +514,7 @@ public:
 
         if ( nc != 0 )
         {
-            m_coefs.conservativeResize(Eigen::NoChange, N);
+            m_coefs.conservativeResize(gsEigen::NoChange, N);
             if ( nc > 0 )
                 m_coefs.rightCols(nc).setZero();
             else // nc < 0

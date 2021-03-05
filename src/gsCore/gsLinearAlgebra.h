@@ -18,6 +18,8 @@
 
 // Eigen linear algebra library (http://eigen.tuxfamily.org)
 
+#define Eigen gsEigen //renaming and wrapping Eigen namespace
+
 // Make Eigen use GISMO_ASSERT which throws exceptions
 //
 // Must be defined before including Eigen headers
@@ -101,7 +103,7 @@ inline bool isfinite(const Eigen::MatrixBase<Derived>& x)
 //Constantss related to gsMatrix
 //( see also external/Eigen/src/Core/util/Constants.h )
 using Eigen::Dynamic ;//=-1
-
+using Eigen::NoChange;
 using Eigen::Lower;//=1
 using Eigen::Upper;//=2
 

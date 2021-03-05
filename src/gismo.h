@@ -36,9 +36,6 @@ namespace internal
 
 }
 
-#define Eigen gismo::gsEigen //renaming and wrapping Eigen namespace
-#include<gsMatrix/gsUndefEigenGuards.h>
-
 /* ----------- Core ----------- */
 // #include <gsCore/gsConfig.h>
 // #include <gsCore/gsDebug.h>
@@ -47,7 +44,11 @@ namespace internal
 #include <gsCore/gsForwardDeclarations.h>
 //#include <gsCore/gsJITCompiler.h>
 
+#include<gsMatrix/gsUndefEigenGuards.h>
+//#define Eigen gsEigen //renaming and wrapping Eigen namespace
 #include <gsCore/gsLinearAlgebra.h>
+#include<gsMatrix/gsUndefEigenGuards.h>
+
 #include <gsCore/gsFunctionSet.h>
 #include <gsCore/gsFuncData.h>
 #include <gsCore/gsFunction.h>
@@ -215,7 +216,6 @@ namespace internal
 #endif
 */
 
-#include<gsMatrix/gsUndefEigenGuards.h>
 #undef Eigen
 
 #endif // __GISMO_H__
