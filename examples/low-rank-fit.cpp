@@ -21,7 +21,7 @@ gsMatrix<real_t> testMatrix(index_t example = 0)
 
 	return coefs;
     }
-    else
+    else if(example == 1)
     {
 	gsMatrix<real_t> coefs(4, 4);
 	coefs.setZero();
@@ -36,6 +36,44 @@ gsMatrix<real_t> testMatrix(index_t example = 0)
 
 	return coefs;
     }
+    else if(example == 2)
+    {
+	gsMatrix<real_t> coefs(5,5);
+	coefs.setZero();
+	coefs(0, 4) = 1;
+	coefs(1, 3) = -1;
+	coefs(2, 2) = 1;
+	coefs(3, 1) = -1;
+	coefs(4, 0) = 1;
+
+	coefs(0, 0) = 2;
+	coefs(1, 1) = 3;
+	coefs(3, 3) = -2;
+	coefs(4, 4) = -3;
+
+	coefs(1, 4) = 5;
+	coefs(2, 3) = 7;
+	coefs(3, 4) = -1;
+	coefs(4, 3) = 9;
+
+	return coefs;
+    }
+    else
+    {
+	index_t numU = 5;
+	index_t numV = 5;
+	gsMatrix<real_t> coefs(numU, numV);
+	for(index_t i = 0; i < numU; i++)
+	{
+	    for(index_t j = 0; j < numV; j++)
+	    {
+		real_t u = i / (numU - 1.0);
+		real_t v = j / (numV - 1.0);
+		coefs(i, j) = (math::exp(math::sqrt(u * u + v * v))) / 4.0;
+	    }
+	}
+	return coefs;
+    }
 }
 
 bool checkSvd()
@@ -45,9 +83,9 @@ bool checkSvd()
     return svd.sanityCheck(coefs);
 }
 
-void checkCrossApp(bool full)
+void checkCrossApp(index_t example, bool pivot)
 {
-    gsMatrix<real_t> coefs = testMatrix(1);
+    gsMatrix<real_t> coefs = testMatrix(example);
     gsMatrix<real_t> check(coefs.rows(), coefs.cols());
     check.setZero();
 
@@ -59,16 +97,46 @@ void checkCrossApp(bool full)
     gsVector<real_t> uVec, vVec;
     for(index_t i=0; i<coefs.rows(); i++)
     {
-	if(full)
-	    crossApp.nextIteration(sigma, uVec, vVec);
-	else
-	    crossApp.nextPivotingIteration(sigma, uVec, vVec);
+	crossApp.nextIteration(sigma, uVec, vVec, pivot);
 
 	matrixUtils::addTensorProduct(check, sigma, uVec, vVec);
-	gsInfo << "Iteration " << i << ":\n" << check << std::endl;
+	gsInfo << "Iteration " << i << ":\n" 
+	       << "check:\n" << check << std::endl;
     }
 	
 }
+
+void checkCrossAppMat(index_t example, bool pivot)
+{
+    gsMatrix<real_t> coefs = testMatrix(example);
+    gsMatrix<real_t> check(coefs.rows(), coefs.cols());
+    check.setZero();
+
+    gsMatrix<real_t> U(coefs.rows(), coefs.cols());
+    gsMatrix<real_t> V(coefs.rows(), coefs.cols());
+    gsMatrix<real_t> T(coefs.cols(), coefs.cols());
+    T.setZero();
+
+    gsInfo << "Target:\n" << coefs << std::endl;
+
+    gsMatrixCrossApproximation<real_t> crossApp(coefs);
+
+    real_t sigma;
+    gsVector<real_t> uVec, vVec;
+    for(index_t i=0; i<coefs.rows(); i++)
+    {
+	crossApp.nextIteration(sigma, uVec, vVec, pivot);
+	U.col(i) = uVec;
+	V.col(i) = vVec;
+	T(i, i) = sigma;
+    }
+
+    gsInfo << "U:\n" << U << "\nT:\n" << T << "\nV:\n" << V << std::endl;
+
+    gsInfo << "UTV^T:\n" << U * T * V.transpose() << std::endl;
+	
+}
+
 
 template <class T>
 void sampleData(index_t numU, index_t numV, gsMatrix<T>& params, gsMatrix<T>& points, index_t example)
@@ -200,7 +268,7 @@ void lowCrossPivFit(const gsMatrix<real_t>& params,
 
     gsLowRankFitting<real_t> fitting(params, points, basis);
     gsInfo << "CrossApp pivoting fitting:\n";
-    fitting.computeCross(true);
+    fitting.computeCross_2(true);
 
     //gsWriteParaview(*fitting.result(), "low-rank", 10000, false, true);
 
@@ -241,13 +309,14 @@ int main()
 
     index_t numKnots = 19;
     index_t deg = 3;
-    //stdFit(        params, points, numKnots, deg);
+    stdFit(        params, points, numKnots, deg);
     //lowSVDFit(     params, points, numKnots, deg);
-    lowCrossAppFit(params, points, numKnots, deg);
+    //lowCrossAppFit(params, points, numKnots, deg);
     lowCrossPivFit(params, points, numKnots, deg);
     //lowCrossResFit(params, points, numKnots, deg);
     //checkCrossApp(false);
+    //checkCrossApp(3, true);
+    //checkCrossAppMat(true);
 
-    // TODO next time: the cross-approximation with pivoting does not converge. Why?
     return 0;    
 }

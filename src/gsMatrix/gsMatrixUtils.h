@@ -20,22 +20,6 @@ namespace gismo
 {
     namespace matrixUtils
     {
-	/*
-	template <class T>
-	gsMatrix<T> tensorProduct(const gsMatrix<T>& u, const gsMatrix<T>& v)
-	{
-	    GISMO_ASSERT(u.cols() == 0, "u should be a col vector.");
-	    GISMO_ASSERT(v.rows() == 0, "v should be a row vector.");
-
-	    gsMatrix<T> result(u.rows(), v.cols());
-	    for(index_t i=0; i<u.rows(); i++)
-		for(index_t j=0; j<v.cols(); j++)
-		    result(i, j) = u(i, 0) * v(0, j);
-
-	    return result;
-	}
-	*/
-
 	template <class T>
 	gsMatrix<T> tensorProduct(const gsVector<T>& u, const gsVector<T>& v)
 	{

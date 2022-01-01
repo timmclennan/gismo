@@ -23,9 +23,11 @@ namespace gismo
 I. Georgieva, C. Hofreither: An algorithm for low-rank approximation
 of bivariate functions using splines, JCAM 310, pp. 80 -- 91, 2017.
 
-However, instead of row pivoting I search for a maximum in the entire
-matrix. That is more precise but probably much slower.
+However, in addition to row pivoting there is also a possibility to
+search for a maximum in the entire matrix. That is more precise but
+probably much slower.
 */
+
 template <class T>
 class gsMatrixCrossApproximation
 {
@@ -35,7 +37,27 @@ public:
     {
     }
 
-    bool nextIteration(T& sigma, gsVector<T>& uVec, gsVector<T>& vVec)
+    bool nextIteration(T& sigma, gsVector<T>& uVec, gsVector<T>& vVec, bool pivot)
+    {
+	if(pivot)
+	    return nextPivotingIteration(sigma, uVec, vVec);
+	else
+	    return nextFullIteration(sigma, uVec, vVec);
+    }
+
+    void updateMatrix(const gsMatrix<T>& matrix)
+    {
+	if(m_mat.rows() != matrix.rows() || m_mat.cols() != matrix.cols())
+	    gsWarn << "Warning: replacing a ("
+		   << m_mat.rows()  << " x " << m_mat.cols() << ") matrix with a ("
+		   << matrix.rows() << " x " << matrix.cols() << ") one." << std::endl;
+
+	m_mat = matrix;
+    }
+
+protected:
+
+    bool nextFullIteration(T& sigma, gsVector<T>& uVec, gsVector<T>& vVec)
     {
 	index_t i=0, j=0;
 	if( !findAbsMax(i, j))
@@ -51,50 +73,35 @@ public:
 	return true;
     }
 
-    bool nextPivotingIteration(T& sigma, gsVector<T>& uVec, gsVector<T>& vVec)
+    bool nextPivotingIteration(T& sigma, gsVector<T>& uVec, gsVector<T>& vVec, index_t shifts = 0)
     {
+	if(shifts > m_mat.rows())
+	{
+	    // This way we prevent a possible infinite loop.
+	    //gsInfo << "Shifted too much." << std::endl;
+	    return false;
+	}
+
 	index_t jk = findAbsMaxRow(m_ik);
 	if(m_mat(m_ik, jk) == 0)
 	{
-	    if(m_ik == m_mat.rows())
-		return false;
-	    else
-	    {
-		m_ik++; // Can there be some non-zero values before?
-		return nextPivotingIteration(sigma, uVec, vVec);
-	    }
+	    //gsInfo << "shifting" << std::endl;
+	    m_ik = (m_ik + 1) % m_mat.rows();
+	    return nextPivotingIteration(sigma, uVec, vVec, shifts+1);
 	}
 	else
 	{
+	    // gsInfo << "approximating\n" << m_mat << std::endl;
+	    // gsInfo << "(i, j) = (" << m_ik << ", " << jk << ")\n";
 	    sigma = 1.0 / m_mat(m_ik, jk);
 	    uVec  = m_mat.col(jk);
 	    vVec  = m_mat.row(m_ik);
 
-	    matrixUtils::addTensorProduct(m_mat, -1 * sigma, uVec, vVec);
 	    m_ik = findAbsMaxCol(jk);
+	    matrixUtils::addTensorProduct(m_mat, -1 * sigma, uVec, vVec);
 	    return true;
 	}
     }
-
-    bool nextIteration(T& sigma, gsVector<T>& uVec, gsVector<T>& vVec, bool pivot)
-    {
-	if(pivot)
-	    return nextPivotingIteration(sigma, uVec, vVec);
-	else
-	    return nextIteration(sigma, uVec, vVec);
-    }
-
-    void updateMatrix(const gsMatrix<T>& matrix)
-    {
-	if(m_mat.rows() != matrix.rows() || m_mat.cols() != matrix.cols())
-	    gsWarn << "Warning: replacing a ("
-		   << m_mat.rows()  << " x " << m_mat.cols() << ") matrix with a ("
-		   << matrix.rows() << " x " << matrix.cols() << ") one." << std::endl;
-
-	m_mat = matrix;
-    }
-
-protected:
 
     index_t findAbsMaxRow(index_t i) const
     {
@@ -104,7 +111,10 @@ protected:
 	{
 	    T curr = math::abs(m_mat(i, j));
 	    if(curr > max)
+	    {
+		max = curr;
 		jk = j;
+	    }
 	}
 	return jk;
     }
@@ -117,7 +127,10 @@ protected:
 	{
 	    T curr = math::abs(m_mat(i, j));
 	    if(curr > max)
+	    {
+		max = curr;
 		ik = i;
+	    }
 	}
 	return ik;
     }

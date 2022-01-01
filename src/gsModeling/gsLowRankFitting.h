@@ -35,6 +35,8 @@ public:
     }
 
     void computeCross(bool pivot);
+
+    void computeCross_2(bool pivot);
     
     void computeSVD();
 
@@ -105,7 +107,7 @@ gsMatrix<T> gsLowRankFitting<T>::getErrorsMN(size_t rows) const
 
     gsMatrix<T> result(rows, this->m_pointErrors.size() / rows);
     for(size_t i=0; i<this->m_pointErrors.size(); i++)
-	result(i%rows, i/rows) = this->m_points(i, 0) - val_i(0, i);
+	result(i%rows, i/rows) = this->m_points(i, 0) - val_i(0, i); // math::abs?
     // Signed distance, works in 1D only.
 	    //this->m_pointErrors[i];
 
@@ -213,10 +215,62 @@ void gsLowRankFitting<T>::computeCross(bool pivot)
 	delete this->m_result;
 	this->m_result = this->m_basis->makeGeometry(give(convertBack(coefs).transpose())).release();
 	this->computeErrors();
-	gsInfo << this->maxPointError() << std::endl;
+	gsInfo << "err: " << this->maxPointError() << std::endl;
     }
 
     // 3. Make a convergence graph.
+}
+
+template <class T>
+void gsLowRankFitting<T>::computeCross_2(bool pivot)
+{
+    gsBSplineBasis<T> uBasis = *(static_cast<gsBSplineBasis<T>*>(&(this->m_basis->component(0))));
+    gsBSplineBasis<T> vBasis = *(static_cast<gsBSplineBasis<T>*>(&(this->m_basis->component(1))));
+
+    gsMatrix<T> coefs(uBasis.size(), vBasis.size());
+    coefs.setZero();
+
+    // 0. Convert points to an m x n matrix.
+    gsMatrix<T> uPar, vPar;
+    index_t uNum = partitionParam(uPar, vPar);
+    gsMatrix<T> ptsMN = convertToMN(uNum);
+
+    gsSparseMatrix<T> Xs, Ys;
+    uBasis.collocationMatrix(uPar, Xs);
+    vBasis.collocationMatrix(vPar, Ys);
+    gsMatrix<T> X(Xs.transpose());
+    gsMatrix<T> Y(Ys.transpose());
+
+    gsMatrix<T> uLeast = (X * X.transpose()).inverse() * X;
+    gsMatrix<T> vLeast = (Y * Y.transpose()).inverse() * Y;
+
+    gsMatrix<T> U(ptsMN.rows(), ptsMN.cols());
+    gsMatrix<T> V(ptsMN.rows(), ptsMN.cols());
+    gsMatrix<T> TT(ptsMN.cols(), ptsMN.cols());
+    TT.setZero();
+    gsMatrixCrossApproximation<T> crossApp(ptsMN);
+    T sigma;
+    gsVector<T> uVec, vVec;
+    //index_t i = 0;
+    while(crossApp.nextIteration(sigma, uVec, vVec, pivot))
+    {
+	// U.col(i) = uVec;
+	// V.col(i) = vVec;
+	// TT(i ,i) = sigma;
+	// i++;
+	gsMatrix<T> uMat(uVec.size(), 1);
+	gsMatrix<T> vMat(vVec.size(), 1);
+	uMat.col(0) = uVec;
+	vMat.col(0) = vVec;
+	coefs = coefs + sigma * (uLeast * uMat * (vLeast * vMat).transpose());
+
+	//}
+	//coefs = uLeast * U * TT * V.transpose() * vLeast.transpose();
+	delete this->m_result;
+	this->m_result = this->m_basis->makeGeometry(give(convertBack(coefs).transpose())).release();
+	this->computeErrors();
+	gsInfo << "err_2: " << this->maxPointError() << std::endl;
+    }
 }
 
 template <class T>
@@ -239,7 +293,7 @@ void gsLowRankFitting<T>::computeRes()
     //index_t iter = 0;
     for (index_t rank=0; rank<ptsMN.rows(); rank++)
     {
-	crossApp.nextIteration(sigma, uVec, vVec);
+	crossApp.nextIteration(sigma, uVec, vVec, false);
 
 	//gsInfo << "iter: " << iter++ << std::endl;
 	// 2.0. Fit u with the u-basis.
