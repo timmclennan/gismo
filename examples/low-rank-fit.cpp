@@ -297,6 +297,50 @@ void lowCrossResFit(const gsMatrix<real_t>& params,
     // fd.dump("low-rank");
 }
 
+void param()
+{
+    gsFileData<> fd("example-2-rank2.xml");
+    gsTensorBSpline<2> bspline;
+    fd.getId<gsTensorBSpline<2>>(0, bspline);
+    gsVector<real_t> shift(2);
+    shift << -0.5, -0.5;
+    bspline.translate(shift);
+    //bspline.rotate(5 * EIGEN_PI / 14);
+    gsWriteParaview(bspline, "bspline", 1000, false, true);
+
+    gsBSpline<> bBott, bLeft;
+    bspline.slice(1, 0.0, bBott);
+    bspline.slice(0, 0.0, bLeft);
+
+    gsMatrix<> cBott = bBott.coefs();
+    gsMatrix<> cLeft = bLeft.coefs();
+
+    // Get-around, since slice gives wrong results for par = 1.0,
+    // cf. https://github.com/gismo/gismo/issues/504
+    gsMatrix<> cRght(5, 2), cTopp(5, 2);
+    gsMatrix<> coefs = bspline.coefs();
+    for(index_t i=0; i<5; i++)
+    {
+	for(index_t j=0; j<2; j++)
+	{
+	    cRght(i, j) = coefs(5 * i + 4, j);
+	    cTopp(i, j) = coefs(20 + i, j);
+	}
+    }
+    //gsInfo << bspline.coefs().rows() << " x " << bspline.coefs().cols() << std::endl;
+
+    // Compatibility check:
+    // gsInfo << cBott.row(0) << std::endl << cLeft.row(0) << std::endl;
+    // gsInfo << cTopp.row(4) << std::endl << cRght.row(4) << std::endl;
+
+    // Figuring out the axial shift (do it on the original and change the sign!).
+    //gsInfo << 0.25 * (cBott.row(0) + cBott.row(4) + cTopp.row(0) + cTopp.row(4)) << std::endl;
+
+    gsLowRankFitting<real_t> fitting;
+    fitting.CR2I_old(cBott, cLeft, cRght, cTopp);
+    fitting.CR2I_new(cBott, cLeft, cRght, cTopp);
+}
+
 
 int main()
 {
@@ -309,14 +353,15 @@ int main()
 
     index_t numKnots = 19;
     index_t deg = 3;
-    stdFit(        params, points, numKnots, deg);
+    //stdFit(        params, points, numKnots, deg);
     //lowSVDFit(     params, points, numKnots, deg);
     //lowCrossAppFit(params, points, numKnots, deg);
-    lowCrossPivFit(params, points, numKnots, deg);
+    //lowCrossPivFit(params, points, numKnots, deg);
     //lowCrossResFit(params, points, numKnots, deg);
     //checkCrossApp(false);
     //checkCrossApp(3, true);
     //checkCrossAppMat(true);
 
+    param();
     return 0;    
 }

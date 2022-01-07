@@ -26,6 +26,11 @@ class gsLowRankFitting : public gsFitting<T>
 {
 public:
 
+    // for param
+    gsLowRankFitting()
+    {
+    }
+
     gsLowRankFitting(const gsMatrix<T>& params,
 		     const gsMatrix<T>& points,
 		     gsTensorBSplineBasis<2, T>& basis)
@@ -41,6 +46,16 @@ public:
     void computeSVD();
 
     void computeRes();
+
+    void CR2I_old(const gsMatrix<T>& bott,
+		  const gsMatrix<T>& left,
+		  const gsMatrix<T>& rght,
+		  const gsMatrix<T>& topp) const;
+
+    void CR2I_new(const gsMatrix<T>& bott,
+		  const gsMatrix<T>& left,
+		  const gsMatrix<T>& rght,
+		  const gsMatrix<T>& topp) const;
 
 protected:
 
@@ -230,7 +245,6 @@ void gsLowRankFitting<T>::computeCross_2(bool pivot)
     gsMatrix<T> coefs(uBasis.size(), vBasis.size());
     coefs.setZero();
 
-    // 0. Convert points to an m x n matrix.
     gsMatrix<T> uPar, vPar;
     index_t uNum = partitionParam(uPar, vPar);
     gsMatrix<T> ptsMN = convertToMN(uNum);
@@ -322,6 +336,130 @@ void gsLowRankFitting<T>::computeRes()
     }
 
     // 3. Make a convergence graph.
+}
+
+template <class T>
+void gsLowRankFitting<T>::CR2I_old(const gsMatrix<T>& bott,
+				   const gsMatrix<T>& left,
+				   const gsMatrix<T>& rght,
+				   const gsMatrix<T>& topp) const
+{
+    gsMatrix<T> res(25, 2);
+
+    for(index_t k=0; k<2; k++)
+    {
+	gsMatrix<T> c(5, 5);
+
+	// Prepare the boundary.
+	for(index_t i=0; i<c.rows(); i++)
+	{
+	    c(i, 0) = left(i, k);
+	    c(i, 4) = rght(i, k);
+	}
+	for(index_t j=0; j<c.cols(); j++)
+	{
+	    c(0, j) = bott(j, k);
+	    c(4, j) = topp(j, k);
+	}
+
+	T delta = matrixUtils::det2x2(c(0, 0), c(0, 4),
+				      c(4, 0), c(4, 4));
+	if(delta == 0)
+	    GISMO_ERROR("Infeasible configuration.");
+
+	for(index_t j=1; j<c.cols() - 1; j++)
+	{
+	    T lambda = (1.0/delta) * matrixUtils::det2x2(c(0, j), c(0, 4),
+							 c(4, j), c(4, 4));
+
+	    T rho    = (1.0/delta) * matrixUtils::det2x2(c(0, 0), c(0, j),
+							 c(4, 0), c(4, j));
+	    
+	    for(index_t i=1; i<c.rows() - 1; i++)
+		c(i, j) = lambda * c(i, 0) + rho * c(i, 4);
+	}
+
+	// Transcribe from c to res(k).
+	for(index_t i=0; i<c.rows(); i++)
+	    for(index_t j=0; j<c.cols(); j++)
+		res(5 * i + j, k) = c(i, j);
+    }
+
+    gsKnotVector<T> KV(0.0, 1.0, 0, 5);
+    gsTensorBSpline<2, T> param(KV, KV, res);
+    gsWriteParaview(param, "param", 1000, false, true);
+
+    // gsBSpline<T> fBott(0.0, 1.0, 0, 4, bott);
+    // gsBSpline<T> fLeft(0.0, 1.0, 0, 4, left);
+    // gsBSpline<T> fRght(0.0, 1.0, 0, 4, rght);
+    // gsBSpline<T> fTopp(0.0, 1.0, 0, 4, topp);
+    // gsWriteParaview(fBott, "bott");
+    // gsWriteParaview(fLeft, "left");
+    // gsWriteParaview(fRght, "rght");
+    // gsWriteParaview(fTopp, "topp");
+}
+
+// TODO next time:
+// - CR2I_old disagrees with the old example: is it CR2I or AR5I there?
+// - Implement CR2I_new.
+// - Compare the two.
+template <class T>
+void gsLowRankFitting<T>::CR2I_new(const gsMatrix<T>& bott,
+				   const gsMatrix<T>& left,
+				   const gsMatrix<T>& rght,
+				   const gsMatrix<T>& topp) const
+{
+    gsKnotVector<T> KV(0.0, 1.0, 0, 5);
+    gsBSplineBasis<T> uBasis(KV);
+    gsBSplineBasis<T> vBasis(KV);
+
+    gsBSpline<T> bSpline(uBasis, bott), tSpline(uBasis, topp);
+    gsBSpline<T> lSpline(vBasis, left), rSpline(vBasis, rght);
+
+    gsMatrix<T> uPar(1, 5), vPar(1, 5);
+    uPar << 0, 0.2, 0.4, 0.6, 0.8;
+    vPar << 0, 0.2, 0.4, 0.6, 0.8;
+
+    gsMatrix<T> coefs(uBasis.size(), vBasis.size());
+    coefs.setZero();
+
+    gsSparseMatrix<T> Xs, Ys;
+    uBasis.collocationMatrix(uPar, Xs);
+    vBasis.collocationMatrix(vPar, Ys);
+    gsMatrix<T> X(Xs.transpose());
+    gsMatrix<T> Y(Ys.transpose());
+
+    gsMatrix<T> uLeast = (X * X.transpose()).inverse() * X;
+    gsMatrix<T> vLeast = (Y * Y.transpose()).inverse() * Y;
+
+    gsMatrix<T> res(25, 2);
+
+    // TODO: The following uses CPs but we need to assemble values in uPar and vPar.
+    for(index_t k=0; k<2; k++)
+    {
+	gsMatrix<T> U(5, 2);
+	gsMatrix<T> TT(2, 2);
+	gsMatrix<T> V(5, 2);
+	T.setZero();
+
+	U.col(0) = bott.col(k);
+	U.col(1) = topp.col(k) - bott.col(k);
+
+	TT(0, 0) = 1.0 / bott(0, k);
+	TT(1, 1) = 1.0 / (topp(4, k) - TT(0, 0));
+
+	V.col(0) = left.col(k);
+	V.col(1) = rght.col(k);
+
+	coefs = uLeast * U * TT * V.transpose() * vLeast.transpose();
+
+	for(index_t i=0; i<5; i++)
+	    for(index_t j=0; j<5; j++)
+		res(5 * i + j, k) = coefs(i, j);
+    }
+
+    gsTensorBSpline<2, T> result(KV, KV, res);
+    gsWriteParaview(param_new, "param", 1000, false, true);
 }
 
 } // namespace gismo

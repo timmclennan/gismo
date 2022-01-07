@@ -42,6 +42,16 @@ namespace gismo
 		    result(i, j) += sigma * u(i) * v(j);
 	}
 
+	template <class T>
+	T det2x2(T c00, T c0n, T cm0, T cmn)
+	{
+	    // gsMatrix<T> mat(2, 2);
+	    // mat << c00, c0n,
+	    // 	cm0, cmn;
+	    // return mat.det();
+	    return c00 * cmn - c0n * cm0;
+	}
+
     } // namespace matrixUtils
 
 } // namespace gismo
