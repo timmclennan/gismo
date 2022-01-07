@@ -440,7 +440,7 @@ void gsLowRankFitting<T>::CR2I_new(const gsMatrix<T>& bott,
 	gsMatrix<T> U(5, 2);
 	gsMatrix<T> TT(2, 2);
 	gsMatrix<T> V(5, 2);
-	T.setZero();
+	TT.setZero();
 
 	U.col(0) = bott.col(k);
 	U.col(1) = topp.col(k) - bott.col(k);
@@ -459,7 +459,7 @@ void gsLowRankFitting<T>::CR2I_new(const gsMatrix<T>& bott,
     }
 
     gsTensorBSpline<2, T> result(KV, KV, res);
-    gsWriteParaview(param_new, "param", 1000, false, true);
+    gsWriteParaview(result, "result_new", 1000, false, true);
 }
 
 } // namespace gismo

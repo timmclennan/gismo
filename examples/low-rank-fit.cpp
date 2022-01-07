@@ -308,13 +308,16 @@ void param()
     //bspline.rotate(5 * EIGEN_PI / 14);
     gsWriteParaview(bspline, "bspline", 1000, false, true);
 
-    gsBSpline<> bBott, bLeft;
+    gsBSpline<> bBott, bLeft, bRght;
     bspline.slice(1, 0.0, bBott);
     bspline.slice(0, 0.0, bLeft);
+    bspline.slice(0, 1.0, bRght);
 
     gsMatrix<> cBott = bBott.coefs();
     gsMatrix<> cLeft = bLeft.coefs();
+    gsMatrix<> cRght_0 = bRght.coefs();
 
+    gsInfo << "slice:\n" << cRght_0 << std::endl;
     // Get-around, since slice gives wrong results for par = 1.0,
     // cf. https://github.com/gismo/gismo/issues/504
     gsMatrix<> cRght(5, 2), cTopp(5, 2);
@@ -327,6 +330,7 @@ void param()
 	    cTopp(i, j) = coefs(20 + i, j);
 	}
     }
+    gsInfo << "manual:\n" << cRght << std::endl;
     //gsInfo << bspline.coefs().rows() << " x " << bspline.coefs().cols() << std::endl;
 
     // Compatibility check:
