@@ -156,7 +156,7 @@ protected:
 	    }
 	}
 
-	return (math::abs(max) > 1e-8);
+	return (math::abs(max) > 1e-15);
     }
 
 protected: // elements

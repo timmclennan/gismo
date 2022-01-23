@@ -139,7 +139,8 @@ void checkCrossAppMat(index_t example, bool pivot)
 
 
 template <class T>
-void sampleData(index_t numU, index_t numV, gsMatrix<T>& params, gsMatrix<T>& points, index_t example)
+void sampleData(index_t numU, index_t numV, gsMatrix<T>& params, gsMatrix<T>& points, index_t example,
+		T minU = 0, T minV = 0, T maxU = 1, T maxV = 1)
 {
     index_t numSamples = numU * numV;
     params.resize(2, numSamples);
@@ -154,8 +155,11 @@ void sampleData(index_t numU, index_t numV, gsMatrix<T>& params, gsMatrix<T>& po
 	for(index_t j=0; j<numV; j++)
 	{
 	    index_t glob = j * numV + i;
-	    real_t u = i / (numU - 1.0);
-	    real_t v = j / (numV - 1.0);
+	    real_t locU = i / (numU - 1.0);
+	    real_t locV = j / (numV - 1.0);
+
+	    real_t u = minU * (1 - locU) + maxU * locU;
+	    real_t v = minV * (1 - locV) + maxV * locV;
 
 	    params(0, glob) = u;
 	    params(1, glob) = v;
@@ -197,17 +201,84 @@ void sampleData(index_t numU, index_t numV, gsMatrix<T>& params, gsMatrix<T>& po
 }
 
 template <class T>
-void sampleData(index_t numSide, gsMatrix<T>& params, gsMatrix<T>& points, index_t example)
+void sampleData(index_t numSide, gsMatrix<T>& params, gsMatrix<T>& points,
+		index_t example, T minT = 0, T maxT = 1)
 {
-    sampleData(numSide, numSide, params, points, example);
+    sampleData(numSide, numSide, params, points, example, minT, minT, maxT, maxT);
+}
+
+
+template <class T>
+void sampleDataGre(const gsKnotVector<T>& knotsU, const gsKnotVector<T>& knotsV,
+		   gsMatrix<T>& params, gsMatrix<T>& points, index_t example)
+{
+    index_t numU = knotsU.size() - knotsU.degree() - 1;
+    index_t numV = knotsV.size() - knotsV.degree() - 1;
+
+    index_t numSamples = numU * numV;
+    params.resize(2, numSamples);
+    points.resize(1, numSamples);
+
+    gsMatrix<T> greU, greV;
+    knotsU.greville_into(greU);
+    knotsV.greville_into(greV);
+
+    gsInfo << greU << std::endl;
+
+    for(index_t i=0; i<greU.cols(); i++)
+    {
+	for(index_t j=0; j<greV.cols(); j++)
+	{
+	    index_t glob = j * numV + i;
+	    real_t u = greU(0, i);
+	    real_t v = greV(0, j);
+
+	    params(0, glob) = u;
+	    params(1, glob) = v;
+
+	    switch(example)
+	    {
+	    case 4:
+	    {
+		T arg = 5 * EIGEN_PI * ((u - 0.2) * (u - 0.2) + (v - 0.0) * (v - 0.0));
+		points(0, glob) = (math::sin(arg)) / arg;
+		break;
+	    }
+	    case 6:
+	    {
+	        points(0, glob) = (2.0 / 3) * (math::exp(-1 * math::sqrt((10 - u) * (10 - u)
+									 +
+									 (10 - v) * (10 - v)))
+					       +
+					       math::exp(-1 * math::sqrt((10 + u) * (10 + u)
+									 +
+									 (10 + v) * (10 + v))));
+		break;
+	    }
+	    default:
+		gsWarn << "Unknown example" << example << "." << std::endl;
+		break;
+	    }
+	}
+    }
+}
+
+template <class T>
+void sampleDataGre(index_t numSide, gsMatrix<T>& params, gsMatrix<T>& points,
+		   index_t example, T minT = 0, T maxT = 1, index_t deg = 3)
+{
+    gsKnotVector<T> kv(minT, maxT, numSide - deg - 1, deg + 1);
+    sampleDataGre(kv, kv, params, points, example);
 }
 
 void stdFit(const gsMatrix<real_t>& params,
 	    const gsMatrix<real_t>& points,
 	    index_t numKnots,
-	    index_t deg)
+	    index_t deg,
+	    real_t minU = 0.0,
+	    real_t maxU = 1.0)
 {
-    gsKnotVector<> knots(0.0, 1.0, numKnots, deg+1);
+    gsKnotVector<> knots(minU, maxU, numKnots, deg+1);
     gsTensorBSplineBasis<2> basis(knots, knots);
     
     gsFitting<real_t> fitting(params, points, basis);
@@ -223,14 +294,17 @@ void stdFit(const gsMatrix<real_t>& params,
 void lowSVDFit(const gsMatrix<real_t>& params,
 	       const gsMatrix<real_t>& points,
 	       index_t numKnots,
-	       index_t deg)
+	       index_t deg,
+	       index_t maxIter,
+	       real_t minU = 0.0,
+	       real_t maxU = 1.0)
 {
-    gsKnotVector<> knots(0.0, 1.0, numKnots, deg+1);
+    gsKnotVector<> knots(minU, maxU, numKnots, deg+1);
     gsTensorBSplineBasis<2> basis(knots, knots);
 
     gsInfo << "SVD fitting:\n";
     gsLowRankFitting<real_t> fitting(params, points, basis);
-    fitting.computeSVD();
+    fitting.computeSVD(maxIter);
 
     //gsWriteParaview(*fitting.result(), "low-rank", 10000, false, true);
 
@@ -242,14 +316,21 @@ void lowSVDFit(const gsMatrix<real_t>& params,
 void lowCrossAppFit(const gsMatrix<real_t>& params,
 		    const gsMatrix<real_t>& points,
 		    index_t numKnots,
-		    index_t deg)
+		    index_t deg,
+		    index_t maxIter,
+		    bool pivot,
+		    real_t minU = 0.0,
+		    real_t maxU = 1.0)
 {
-    gsKnotVector<> knots(0.0, 1.0, numKnots, deg+1);
+    gsKnotVector<> knots(minU, maxU, numKnots, deg+1);
     gsTensorBSplineBasis<2> basis(knots, knots);
 
     gsLowRankFitting<real_t> fitting(params, points, basis);
-    gsInfo << "CrossApp fitting:\n";
-    fitting.computeCross(false);
+    gsInfo << "CrossApp fitting";
+    if(pivot)
+	gsInfo << " with pivoting";
+    gsInfo << ":\n";
+    fitting.computeCross_2(pivot, maxIter);
 
     //gsWriteParaview(*fitting.result(), "low-rank", 10000, false, true);
 
@@ -258,32 +339,37 @@ void lowCrossAppFit(const gsMatrix<real_t>& params,
     // fd.dump("low-rank");
 }
 
-void lowCrossPivFit(const gsMatrix<real_t>& params,
-		    const gsMatrix<real_t>& points,
-		    index_t numKnots,
-		    index_t deg)
-{
-    gsKnotVector<> knots(0.0, 1.0, numKnots, deg+1);
-    gsTensorBSplineBasis<2> basis(knots, knots);
+// void lowCrossPivFit(const gsMatrix<real_t>& params,
+// 		    const gsMatrix<real_t>& points,
+// 		    index_t numKnots,
+// 		    index_t deg,
+// 		    index_t maxIter,
+// 		    real_t minU = 0.0,
+// 		    real_t maxU = 1.0)
+// {
+//     gsKnotVector<> knots(minU, maxU, numKnots, deg+1);
+//     gsTensorBSplineBasis<2> basis(knots, knots);
 
-    gsLowRankFitting<real_t> fitting(params, points, basis);
-    gsInfo << "CrossApp pivoting fitting:\n";
-    fitting.computeCross_2(true);
+//     gsLowRankFitting<real_t> fitting(params, points, basis);
+//     gsInfo << "CrossApp pivoting fitting:\n";
+//     fitting.computeCross_2(true, maxIter);
 
-    //gsWriteParaview(*fitting.result(), "low-rank", 10000, false, true);
+//     //gsWriteParaview(*fitting.result(), "low-rank", 10000, false, true);
 
-    // gsFileData<real_t> fd;
-    // fd << *fitting.result();
-    // fd.dump("low-rank");
-}
+//     // gsFileData<real_t> fd;
+//     // fd << *fitting.result();
+//     // fd.dump("low-rank");
+// }
 
 
 void lowCrossResFit(const gsMatrix<real_t>& params,
 		    const gsMatrix<real_t>& points,
 		    index_t numKnots,
-		    index_t deg)
+		    index_t deg,
+		    real_t minU = 0.0,
+		    real_t maxU = 1.0)
 {
-    gsKnotVector<> knots(0.0, 1.0, numKnots, deg+1);
+    gsKnotVector<> knots(minU, maxU, numKnots, deg+1);
     gsTensorBSplineBasis<2> basis(knots, knots);
 
     gsLowRankFitting<real_t> fitting(params, points, basis);
@@ -350,22 +436,26 @@ int main()
 {
     //checkSvd();
     gsMatrix<real_t> params, points;
-    sampleData(100, params, points, 5);
+    real_t minT = -1.0; // -1 leads to a confusion index_t / real_t.
+    //real_t minT = 0;
+    //sampleData(100, params, points, 4, minT);
+    sampleDataGre(100, params, points, 4, minT, 1.0, 2);
     // Experience: for examples 0 and 1 (rank 1 and 2, respectively),
     // we obtain the same precision as the standard fit after rank
     // iterations. Cool! Can we prove this to be true in general?
 
-    index_t numKnots = 19;
-    index_t deg = 3;
-    //stdFit(        params, points, numKnots, deg);
-    //lowSVDFit(     params, points, numKnots, deg);
-    //lowCrossAppFit(params, points, numKnots, deg);
-    //lowCrossPivFit(params, points, numKnots, deg);
+    index_t numKnots = 97;
+    index_t deg = 2;
+    index_t maxIter = 16;
+    //stdFit(        params, points, numKnots, deg, minT);
+    lowSVDFit(     params, points, numKnots, deg, maxIter, minT);
+    lowCrossAppFit(params, points, numKnots, deg, maxIter, false, minT);
+    lowCrossAppFit(params, points, numKnots, deg, maxIter, true,  minT);
     //lowCrossResFit(params, points, numKnots, deg);
     //checkCrossApp(false);
     //checkCrossApp(3, true);
     //checkCrossAppMat(true);
 
-    param();
+    //param();
     return 0;    
 }
