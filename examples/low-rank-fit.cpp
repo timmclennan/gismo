@@ -1,5 +1,6 @@
 #include <gismo.h>
 #include <gsModeling/gsLowRankFitting.h>
+#include <gsModeling/gsL2Error.h>
 
 #include <random>
 
@@ -207,7 +208,6 @@ void sampleData(index_t numSide, gsMatrix<T>& params, gsMatrix<T>& points,
     sampleData(numSide, numSide, params, points, example, minT, minT, maxT, maxT);
 }
 
-
 template <class T>
 void sampleDataGre(const gsKnotVector<T>& knotsU, const gsKnotVector<T>& knotsV,
 		   gsMatrix<T>& params, gsMatrix<T>& points, index_t example)
@@ -223,7 +223,8 @@ void sampleDataGre(const gsKnotVector<T>& knotsU, const gsKnotVector<T>& knotsV,
     knotsU.greville_into(greU);
     knotsV.greville_into(greV);
 
-    gsInfo << greU << std::endl;
+    //gsInfo << greU << std::endl;
+    //gsInfo << greU.cols() << ", " << greV.cols() << std::endl;
 
     for(index_t i=0; i<greU.cols(); i++)
     {
@@ -246,13 +247,7 @@ void sampleDataGre(const gsKnotVector<T>& knotsU, const gsKnotVector<T>& knotsV,
 	    }
 	    case 6:
 	    {
-	        points(0, glob) = (2.0 / 3) * (math::exp(-1 * math::sqrt((10 - u) * (10 - u)
-									 +
-									 (10 - v) * (10 - v)))
-					       +
-					       math::exp(-1 * math::sqrt((10 + u) * (10 + u)
-									 +
-									 (10 + v) * (10 + v))));
+	        points(0, glob) = evalExp(u, v);
 		break;
 	    }
 	    default:
@@ -284,8 +279,12 @@ void stdFit(const gsMatrix<real_t>& params,
     gsFitting<real_t> fitting(params, points, basis);
     fitting.compute();
     fitting.computeErrors();
-    gsInfo << "Err of standard fittting: " << fitting.maxPointError() << std::endl;
-    gsWriteParaview(*fitting.result(), "fitting", 10000, false, true);
+    //gsInfo << "Max err of standard fitting: " << fitting.maxPointError() << std::endl;
+    //gsInfo << "L2  err of standard fitting: " << fitting.L2Error() << std::endl;
+    gsInfo << "L2 error of standard fitting: "
+	   <<  L2distFromExp(*static_cast<gsTensorBSpline<2, real_t>*>(fitting.result()))
+	   << std::endl;
+    //gsWriteParaview(*fitting.result(), "fitting", 10000, false, true);
     // gsFileData<real_t> fd;
     // fd << *fitting.result();
     // fd.dump("fitting");
@@ -296,6 +295,7 @@ void lowSVDFit(const gsMatrix<real_t>& params,
 	       index_t numKnots,
 	       index_t deg,
 	       index_t maxIter,
+	       const std::string& filename,
 	       real_t minU = 0.0,
 	       real_t maxU = 1.0)
 {
@@ -304,7 +304,7 @@ void lowSVDFit(const gsMatrix<real_t>& params,
 
     gsInfo << "SVD fitting:\n";
     gsLowRankFitting<real_t> fitting(params, points, basis);
-    fitting.computeSVD(maxIter);
+    fitting.computeSVD(maxIter, filename);
 
     //gsWriteParaview(*fitting.result(), "low-rank", 10000, false, true);
 
@@ -318,6 +318,7 @@ void lowCrossAppFit(const gsMatrix<real_t>& params,
 		    index_t numKnots,
 		    index_t deg,
 		    index_t maxIter,
+		    const std::string& filename,
 		    bool pivot,
 		    real_t minU = 0.0,
 		    real_t maxU = 1.0)
@@ -330,7 +331,7 @@ void lowCrossAppFit(const gsMatrix<real_t>& params,
     if(pivot)
 	gsInfo << " with pivoting";
     gsInfo << ":\n";
-    fitting.computeCross_2(pivot, maxIter);
+    fitting.computeCross(pivot, maxIter, filename);
 
     //gsWriteParaview(*fitting.result(), "low-rank", 10000, false, true);
 
@@ -338,29 +339,6 @@ void lowCrossAppFit(const gsMatrix<real_t>& params,
     // fd << *fitting.result();
     // fd.dump("low-rank");
 }
-
-// void lowCrossPivFit(const gsMatrix<real_t>& params,
-// 		    const gsMatrix<real_t>& points,
-// 		    index_t numKnots,
-// 		    index_t deg,
-// 		    index_t maxIter,
-// 		    real_t minU = 0.0,
-// 		    real_t maxU = 1.0)
-// {
-//     gsKnotVector<> knots(minU, maxU, numKnots, deg+1);
-//     gsTensorBSplineBasis<2> basis(knots, knots);
-
-//     gsLowRankFitting<real_t> fitting(params, points, basis);
-//     gsInfo << "CrossApp pivoting fitting:\n";
-//     fitting.computeCross_2(true, maxIter);
-
-//     //gsWriteParaview(*fitting.result(), "low-rank", 10000, false, true);
-
-//     // gsFileData<real_t> fd;
-//     // fd << *fitting.result();
-//     // fd.dump("low-rank");
-// }
-
 
 void lowCrossResFit(const gsMatrix<real_t>& params,
 		    const gsMatrix<real_t>& points,
@@ -431,31 +409,75 @@ void param()
     fitting.CR2I_new(cBott, cLeft, cRght, cTopp);
 }
 
-
-int main()
+void development()
 {
     //checkSvd();
     gsMatrix<real_t> params, points;
     real_t minT = -1.0; // -1 leads to a confusion index_t / real_t.
     //real_t minT = 0;
     //sampleData(100, params, points, 4, minT);
-    sampleDataGre(100, params, points, 4, minT, 1.0, 2);
+    //sampleDataGre(100, params, points, 4, minT, 1.0, 2);
+    sampleDataGre(50, params, points, 6, minT, 1.0, 2);
     // Experience: for examples 0 and 1 (rank 1 and 2, respectively),
     // we obtain the same precision as the standard fit after rank
     // iterations. Cool! Can we prove this to be true in general?
 
-    index_t numKnots = 97;
+    index_t numKnots = 47;
     index_t deg = 2;
-    index_t maxIter = 16;
+    index_t maxIter = 25;
+    std::string filename = "old";
     //stdFit(        params, points, numKnots, deg, minT);
-    lowSVDFit(     params, points, numKnots, deg, maxIter, minT);
-    lowCrossAppFit(params, points, numKnots, deg, maxIter, false, minT);
-    lowCrossAppFit(params, points, numKnots, deg, maxIter, true,  minT);
+    lowSVDFit(     params, points, numKnots, deg, maxIter, filename, minT);
+    lowCrossAppFit(params, points, numKnots, deg, maxIter, filename, false, minT);
+    lowCrossAppFit(params, points, numKnots, deg, maxIter, filename, true,  minT);
     //lowCrossResFit(params, points, numKnots, deg);
     //checkCrossApp(false);
     //checkCrossApp(3, true);
     //checkCrossAppMat(true);
 
     //param();
+}
+
+void example_2()
+{
+    std::vector<index_t> dataSizes(4);
+    dataSizes[0] = 50;
+    dataSizes[1] = 100;
+    dataSizes[2] = 200;
+    dataSizes[3] = 400;
+
+    for(auto it=dataSizes.begin(); it!=dataSizes.end(); ++it)
+    {
+	gsMatrix<real_t> params, points;
+	real_t minT = -1.0; // -1 leads to a confusion index_t / real_t.
+	sampleDataGre(*it, params, points, 6, minT, 1.0, 2);
+
+	index_t deg = 2;
+	index_t numKnots = *it - deg - 1;
+	index_t maxIter = 25;
+
+	std::string filename = std::to_string(*it);
+
+	stdFit(        params, points, numKnots, deg, minT);
+	// lowSVDFit(     params, points, numKnots, deg, maxIter, filename, minT);
+	//lowCrossAppFit(params, points, numKnots, deg, maxIter, filename, false, minT);
+	//lowCrossAppFit(params, points, numKnots, deg, maxIter, filename, true,  minT);
+    }
+}
+
+void integration()
+{
+    gsFileData<> fileData("surfaces/simple.xml");
+    gsGeometry<>::uPtr pGeom = fileData.getFirst< gsGeometry<> >();
+    gsTensorBSpline<2, real_t> *spline = static_cast<gsTensorBSpline<2, real_t>*>(pGeom.get());
+    gsInfo << *spline << std::endl;
+    gsInfo << "The quadrature rule returned: " << L2distFromExp(*spline, true) << std::endl;
+}
+
+int main()
+{
+    //development();
+    example_2();
+    //integration();
     return 0;    
 }

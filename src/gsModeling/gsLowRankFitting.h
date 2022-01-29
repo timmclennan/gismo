@@ -17,6 +17,7 @@
 #include <gsMatrix/gsSvd.h>
 #include <gsMatrix/gsMatrixUtils.h>
 #include <gsMatrix/gsMatrixCrossApproximation.h>
+#include <gsModeling/gsL2Error.h>
 
 namespace gismo
 {
@@ -39,11 +40,9 @@ public:
 	// Note: Forgetting the <T> leads to a confusing error message.
     }
 
-    void computeCross(bool pivot, index_t maxIter);
-
-    void computeCross_2(bool pivot, index_t maxIter);
+    void computeCross(bool pivot, index_t maxIter, const std::string& filename);
     
-    void computeSVD(index_t maxIter);
+    void computeSVD(index_t maxIter, const std::string& filename);
 
     void computeRes();
 
@@ -57,7 +56,13 @@ public:
 		  const gsMatrix<T>& rght,
 		  const gsMatrix<T>& topp) const;
 
+    //T L2error() const;
+
 protected:
+
+    void gsWriteGnuplot(const std::vector<T>& xData,
+			const std::vector<T>& yData,
+			const std::string& filename) const;
 
     void gsWriteGnuplot(const std::vector<T>& data, const std::string& filename) const;
 
@@ -71,15 +76,34 @@ protected:
 };
 
 template <class T>
+void gsLowRankFitting<T>::gsWriteGnuplot(const std::vector<T>& xData,
+					 const std::vector<T>& yData,
+					 const std::string& filename) const
+{
+    GISMO_ASSERT(xData.size() == yData.size(), "differring data sizes when writing to gnuplot");
+
+    std::ofstream fout;
+    fout.open(filename, std::ofstream::out);
+    fout << "# x y\n";
+    for(size_t i=0; i<xData.size(); i++)
+    	fout << "  " << xData[i] << "   " << yData[i] << "\n";
+    fout.close();	
+}
+
+template <class T>
 void gsLowRankFitting<T>::gsWriteGnuplot(const std::vector<T>& data, const std::string& filename) const
 {
+    // Note: before converting this to use the overloaded function
+    // think about data types (T vs. index_t).
+
     std::ofstream fout;
     fout.open(filename, std::ofstream::out);
     fout << "# x y\n";
     for(size_t i=0; i<data.size(); i++)
     	fout << "  " << i+1 << "   " << data[i] << "\n";
-    fout.close();	
+    fout.close();
 }
+
 
 template <class T>
 index_t gsLowRankFitting<T>::partitionParam(gsMatrix<T>& uPar, gsMatrix<T>& vPar) const
@@ -143,7 +167,7 @@ gsMatrix<T> gsLowRankFitting<T>::getErrorsMN(size_t rows) const
 }
 
 template <class T>
-void gsLowRankFitting<T>::computeSVD(index_t maxIter)
+void gsLowRankFitting<T>::computeSVD(index_t maxIter, const std::string& filename)
 {
     
     gsBSplineBasis<T> uBasis = *(static_cast<gsBSplineBasis<T>*>(&(this->m_basis->component(0))));
@@ -160,10 +184,12 @@ void gsLowRankFitting<T>::computeSVD(index_t maxIter)
     // 1. Perform an SVD on it.
     gsSvd<T> pointSVD(ptsMN);
     //pointSVD.sanityCheck(ptsMN);
-    gsInfo << "Rank: " << pointSVD.rank() << std::endl;
+    //gsInfo << "Rank: " << pointSVD.rank() << std::endl;
 
     // 2. Iterate.
-    std::vector<T> err;
+    std::vector<T> LIErr;
+    std::vector<T> L2Err;
+    std::vector<T> dofs;
     for(index_t r=0; r<pointSVD.rank() && r<maxIter; r++)
     {
 	// 2.0. Fit u with the u-basis.
@@ -184,66 +210,20 @@ void gsLowRankFitting<T>::computeSVD(index_t maxIter)
 	this->m_result = this->m_basis->makeGeometry(give(convertBack(coefs).transpose())).release();
 	this->computeErrors();
 	T maxErr = this->maxPointError();
-	gsInfo << "err SVD: " << maxErr << std::endl;
-	err.push_back(maxErr);
+	//gsInfo << "err SVD: " << maxErr << std::endl;
+	LIErr.push_back(maxErr);
+	//L2Err.push_back(this->L2Error());
+	dofs.push_back((r+1) * uCoefs.size() * vCoefs.size());
     }
 
     // 3. Make a convergence graph.
-    gsWriteGnuplot(err, "svd.dat");
+    gsWriteGnuplot(LIErr, filename + "svd_max.dat");
+    gsWriteGnuplot(L2Err, filename + "svd_L2.dat");
+    //gsWriteGnuplot(dofs, L2Err, "svdL2.dat");
 }
 
-// template <class T>
-// void gsLowRankFitting<T>::computeCross(bool pivot, index_t maxIter)
-// {
-//     gsBSplineBasis<T> uBasis = *(static_cast<gsBSplineBasis<T>*>(&(this->m_basis->component(0))));
-//     gsBSplineBasis<T> vBasis = *(static_cast<gsBSplineBasis<T>*>(&(this->m_basis->component(1))));
-
-//     gsMatrix<real_t> coefs(uBasis.size(), vBasis.size());
-//     coefs.setZero();
-
-//     // 0. Convert points to an m x n matrix.
-//     gsMatrix<T> uPar, vPar;
-//     index_t uNum = partitionParam(uPar, vPar);
-//     gsMatrix<real_t> ptsMN = convertToMN(uNum);
-
-//     gsMatrixCrossApproximation<T> crossApp(ptsMN);
-//     T sigma;
-//     gsVector<T> uVec, vVec;
-//     std::vector<T> err;
-//     for(index_t i=0; i<maxIter && crossApp.nextIteration(sigma, uVec, vVec, pivot); i++)
-//     {
-// 	//gsInfo << "iter: " << iter++ << std::endl;
-// 	// 2.0. Fit u with the u-basis.
-// 	// gsInfo << "uPar:\n" << uPar << std::endl;
-// 	// gsInfo << "uPts:\n" << uVec.transpose() << std::endl;
-// 	gsFitting<real_t> uFitting(uPar, uVec.transpose(), uBasis);
-// 	uFitting.compute();
-	
-// 	// 2.1. Fit v with the v-basis.
-// 	// gsInfo << "vPar:\n" << vPar << std::endl;
-// 	// gsInfo << "vPts:\n" << vVec.transpose() << std::endl;
-// 	gsFitting<real_t> vFitting(vPar, vVec.transpose(), vBasis);
-// 	vFitting.compute();
-
-// 	// 2.3. Add the coefficients to the running tensor-product B-spline.
-// 	gsVector<real_t> uCoefs = uFitting.result()->coefs().col(0);
-// 	gsVector<real_t> vCoefs = vFitting.result()->coefs().col(0);
-// 	matrixUtils::addTensorProduct(coefs, sigma, uCoefs, vCoefs);
-
-// 	delete this->m_result;
-// 	this->m_result = this->m_basis->makeGeometry(give(convertBack(coefs).transpose())).release();
-// 	this->computeErrors();
-// 	T maxErr = this->maxPointError();
-// 	gsInfo << "err: " << maxErr << std::endl;
-// 	err.push_back(maxErr);
-//     }
-
-//     // 3. Make a convergence graph.
-//     gsWriteGnuplot(err, "full.dat");
-// }
-
 template <class T>
-void gsLowRankFitting<T>::computeCross_2(bool pivot, index_t maxIter)
+void gsLowRankFitting<T>::computeCross(bool pivot, index_t maxIter, const std::string& filename)
 {
     gsBSplineBasis<T> uBasis = *(static_cast<gsBSplineBasis<T>*>(&(this->m_basis->component(0))));
     gsBSplineBasis<T> vBasis = *(static_cast<gsBSplineBasis<T>*>(&(this->m_basis->component(1))));
@@ -274,7 +254,8 @@ void gsLowRankFitting<T>::computeCross_2(bool pivot, index_t maxIter)
     gsMatrixCrossApproximation<T> crossApp(ptsMN);
     T sigma;
     gsVector<T> uVec, vVec;
-    std::vector<T> err;
+    std::vector<T> LIErr;
+    std::vector<T> L2Err;
     for(index_t i=0; i<maxIter && crossApp.nextIteration(sigma, uVec, vVec, pivot); i++)
     {
 	// U.col(i) = uVec;
@@ -294,14 +275,22 @@ void gsLowRankFitting<T>::computeCross_2(bool pivot, index_t maxIter)
 	this->m_result = this->m_basis->makeGeometry(give(convertBack(coefs).transpose())).release();
 	this->computeErrors();
 	T maxErr = this->maxPointError();
-	gsInfo << "err piv: " << maxErr << std::endl;
-	err.push_back(maxErr);
+	//gsInfo << "err piv: " << maxErr << std::endl;
+	LIErr.push_back(maxErr);
+	L2Err.push_back(L2distFromExp(*static_cast<gsTensorBSpline<2, real_t>*>(this->result())));
+	//L2Err.push_back(this->L2Error());
     }
 
     if(pivot)
-	gsWriteGnuplot(err, "piv.dat");
+    {
+	gsWriteGnuplot(LIErr, filename + "piv_max.dat");
+	gsWriteGnuplot(L2Err, filename + "piv_L2.dat");
+    }
     else
-	gsWriteGnuplot(err, "full.dat");
+    {
+	gsWriteGnuplot(LIErr, filename + "full_max.dat");
+	gsWriteGnuplot(L2Err, filename + "full_L2.dat");
+    }	
     //gsWriteParaview(*this->m_result, "result");
 }
 
@@ -320,7 +309,7 @@ void gsLowRankFitting<T>::computeRes()
     gsMatrix<real_t> ptsMN = convertToMN(uNum);
 
     gsMatrixCrossApproximation<T> crossApp(ptsMN);
-    T sigma;
+    T sigma = 0;
     gsVector<T> uVec, vVec;
     //index_t iter = 0;
     for (index_t rank=0; rank<ptsMN.rows(); rank++)
@@ -348,7 +337,7 @@ void gsLowRankFitting<T>::computeRes()
 	delete this->m_result;
 	this->m_result = this->m_basis->makeGeometry(give(convertBack(coefs).transpose())).release();
 	this->computeErrors();
-	gsInfo << this->maxPointError() << std::endl;
+	//gsInfo << this->maxPointError() << std::endl;
 
 	crossApp.updateMatrix(getErrorsMN(uNum));
     }
@@ -479,5 +468,16 @@ void gsLowRankFitting<T>::CR2I_new(const gsMatrix<T>& bott,
     gsTensorBSpline<2, T> result(KV, KV, res);
     gsWriteParaview(result, "result_new", 1000, false, true);
 }
+
+// template <class T>
+// T gsLowRankFitting<T>::L2error() const
+// {
+//     T result = 0;
+//     for(auto it=this->m_pointErrors.begin(); it!=this->m_pointErrors.end(); ++it)
+// 	result += (*it) * (*it);
+
+//     return math::sqrt(result);
+//     //return result;
+// }
 
 } // namespace gismo
