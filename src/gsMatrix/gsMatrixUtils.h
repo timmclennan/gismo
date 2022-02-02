@@ -52,6 +52,27 @@ namespace gismo
 	    return c00 * cmn - c0n * cm0;
 	}
 
+	template <class T>
+	gsMatrix<T> diag(const gsVector<T>& vec)
+	{
+	    index_t size = vec.size();
+	    gsMatrix<T> result(size, size);
+	    result.setZero();
+	    for(index_t i=0; i<size; i++)
+		result(i, i) = vec(i);
+	    return result;
+	}
+
+	template <class T>
+	gsMatrix<T> identity(index_t size)
+	{
+	    gsMatrix<T> result(size, size);
+	    result.setZero();
+	    for(index_t i=0; i<size; i++)
+		result(i, i) = T(1);
+	    return result;
+	}
+
     } // namespace matrixUtils
 
 } // namespace gismo

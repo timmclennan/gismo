@@ -138,29 +138,29 @@ void checkCrossAppMat(index_t example, bool pivot)
 	
 }
 
-
 template <class T>
-void sampleData(index_t numU, index_t numV, gsMatrix<T>& params, gsMatrix<T>& points, index_t example,
-		T minU = 0, T minV = 0, T maxU = 1, T maxV = 1)
+void sampleData(const gsVector<T>& uPar, const gsVector<T>& vPar,
+		gsMatrix<T>& params, gsMatrix<T>& points, index_t example)
 {
-    index_t numSamples = numU * numV;
+    index_t uNum = uPar.size();
+    index_t vNum = vPar.size();
+    index_t numSamples = uNum * vNum;
+
     params.resize(2, numSamples);
     points.resize(1, numSamples);
 
-    std::random_device dev;
-    std::mt19937 rng(dev());
-    std::uniform_real_distribution<> dist(0, 1); // distribution in range [-1, 1]
+    // gsInfo << "uPar:\n";
+    // for(index_t i=0; i<uPar.size(); i++)
+    // 	gsInfo << uPar(i) << " ";
+    // gsInfo << std::endl;
 
-    for(index_t i=0; i<numU; i++)
+    for(index_t i=0; i<uNum; i++)
     {
-	for(index_t j=0; j<numV; j++)
+	for(index_t j=0; j<vNum; j++)
 	{
-	    index_t glob = j * numV + i;
-	    real_t locU = i / (numU - 1.0);
-	    real_t locV = j / (numV - 1.0);
-
-	    real_t u = minU * (1 - locU) + maxU * locU;
-	    real_t v = minV * (1 - locV) + maxV * locV;
+	    index_t glob = j * vNum + i;
+	    real_t u = uPar(i);
+	    real_t v = vPar(j);
 
 	    params(0, glob) = u;
 	    params(1, glob) = v;
@@ -177,13 +177,6 @@ void sampleData(index_t numU, index_t numV, gsMatrix<T>& params, gsMatrix<T>& po
 	    case 2:
 		points(0, glob) = math::sin((u + v) * EIGEN_PI) * 0.125;
 		break;
-	    case 3:
-	    {
-		T num = dist(rng);
-		//gsInfo << num << " ";
-		points(0, glob) = num;
-		break;
-	    }
 	    case 4:
 	    {
 		T arg = 5 * EIGEN_PI * ((u - 0.2) * (u - 0.2) + (v - 0.0) * (v - 0.0));
@@ -191,71 +184,63 @@ void sampleData(index_t numU, index_t numV, gsMatrix<T>& params, gsMatrix<T>& po
 		break;
 	    }
 	    case 5:
-		points(0, glob) = (math::exp(math::sqrt(u * u + v * v))) / 4;
+		points(0, glob) = evalExpSqrt(u, v);
+		break;
+	    case 6:
+		points(0, glob) = evalExp(u, v);
 		break;
 	    default:
-		gsWarn << "Unknown example" << example << "." << std::endl;
-		break;
+		gsWarn << "Unknown example " << example << "." << std::endl;
 	    }
 	}
     }
+    // gsInfo << "params:\n" << params << std::endl;
+    // gsInfo << "points:\n" << points << std::endl;
+}
+
+template <class T>
+gsVector<T> sampleUniform(index_t size, T tMin, T tMax)
+{
+    gsVector<T> res(size);
+    for(index_t i=0; i<size; i++)
+    {
+	real_t tLoc = i / (size - 1.0);
+	real_t tAct = tMin * (1 - tLoc) + tMax * tLoc;
+	res(i) = tAct;
+    }
+    return res;
+}
+
+template <class T>
+void sampleData(index_t uNum, index_t vNum, gsMatrix<T>& params, gsMatrix<T>& points,
+		index_t example,
+		T uMin = 0, T vMin = 0, T uMax = 1, T vMax = 1)
+{
+    gsVector<T> uPar = sampleUniform(uNum, uMin, uMax);
+    gsVector<T> vPar = sampleUniform(vNum, vMin, vMax);
+
+    sampleData(uPar, vPar, params, points, example);
 }
 
 template <class T>
 void sampleData(index_t numSide, gsMatrix<T>& params, gsMatrix<T>& points,
-		index_t example, T minT = 0, T maxT = 1)
+		index_t example, T tMin = 0, T tMax = 1)
 {
-    sampleData(numSide, numSide, params, points, example, minT, minT, maxT, maxT);
+    sampleData(numSide, numSide, params, points, example, tMin, tMin, tMax, tMax);
 }
 
 template <class T>
 void sampleDataGre(const gsKnotVector<T>& knotsU, const gsKnotVector<T>& knotsV,
 		   gsMatrix<T>& params, gsMatrix<T>& points, index_t example)
 {
-    index_t numU = knotsU.size() - knotsU.degree() - 1;
-    index_t numV = knotsV.size() - knotsV.degree() - 1;
-
-    index_t numSamples = numU * numV;
-    params.resize(2, numSamples);
-    points.resize(1, numSamples);
-
     gsMatrix<T> greU, greV;
     knotsU.greville_into(greU);
     knotsV.greville_into(greV);
 
-    //gsInfo << greU << std::endl;
-    //gsInfo << greU.cols() << ", " << greV.cols() << std::endl;
+    gsVector<T> uPar = greU.row(0);
+    gsVector<T> vPar = greV.row(0);
 
-    for(index_t i=0; i<greU.cols(); i++)
-    {
-	for(index_t j=0; j<greV.cols(); j++)
-	{
-	    index_t glob = j * numV + i;
-	    real_t u = greU(0, i);
-	    real_t v = greV(0, j);
-
-	    params(0, glob) = u;
-	    params(1, glob) = v;
-
-	    switch(example)
-	    {
-	    case 4:
-	    {
-		T arg = 5 * EIGEN_PI * ((u - 0.2) * (u - 0.2) + (v - 0.0) * (v - 0.0));
-		points(0, glob) = (math::sin(arg)) / arg;
-		break;
-	    }
-	    case 6:
-	    {
-	        points(0, glob) = evalExp(u, v);
-		break;
-	    }
-	    default:
-		gsWarn << "Unknown example" << example << "." << std::endl;
-		break;
-	    }
-	}
-    }
+    sampleData(uPar, vPar, params, points, example);
 }
 
 template <class T>
@@ -279,7 +264,7 @@ void stdFit(const gsMatrix<real_t>& params,
     gsFitting<real_t> fitting(params, points, basis);
     fitting.compute();
     fitting.computeErrors();
-    //gsInfo << "Max err of standard fitting: " << fitting.maxPointError() << std::endl;
+    gsInfo << "Max err of standard fitting: " << fitting.maxPointError() << std::endl;
     //gsInfo << "L2  err of standard fitting: " << fitting.L2Error() << std::endl;
     gsInfo << "L2 error of standard fitting: "
 	   <<  L2distFromExp(*static_cast<gsTensorBSpline<2, real_t>*>(fitting.result()))
@@ -415,18 +400,18 @@ void development()
     gsMatrix<real_t> params, points;
     real_t minT = -1.0; // -1 leads to a confusion index_t / real_t.
     //real_t minT = 0;
-    //sampleData(100, params, points, 4, minT);
-    //sampleDataGre(100, params, points, 4, minT, 1.0, 2);
-    sampleDataGre(50, params, points, 6, minT, 1.0, 2);
+    //sampleData(10, params, points, 5, minT);
+    sampleDataGre(10, params, points, 4, minT, 1.0, 2);
+    //sampleDataGre(50, params, points, 6, minT, 1.0, 2);
     // Experience: for examples 0 and 1 (rank 1 and 2, respectively),
     // we obtain the same precision as the standard fit after rank
     // iterations. Cool! Can we prove this to be true in general?
 
-    index_t numKnots = 47;
+    index_t numKnots = 0;
     index_t deg = 2;
-    index_t maxIter = 25;
+    index_t maxIter = 5;
     std::string filename = "old";
-    //stdFit(        params, points, numKnots, deg, minT);
+    stdFit(        params, points, numKnots, deg, minT);
     lowSVDFit(     params, points, numKnots, deg, maxIter, filename, minT);
     lowCrossAppFit(params, points, numKnots, deg, maxIter, filename, false, minT);
     lowCrossAppFit(params, points, numKnots, deg, maxIter, filename, true,  minT);
@@ -440,11 +425,11 @@ void development()
 
 void example_2()
 {
-    std::vector<index_t> dataSizes(4);
+    std::vector<index_t> dataSizes(2);
     dataSizes[0] = 50;
     dataSizes[1] = 100;
-    dataSizes[2] = 200;
-    dataSizes[3] = 400;
+    //dataSizes[2] = 200;
+    //dataSizes[3] = 400;
 
     for(auto it=dataSizes.begin(); it!=dataSizes.end(); ++it)
     {
@@ -458,11 +443,31 @@ void example_2()
 
 	std::string filename = std::to_string(*it);
 
-	stdFit(        params, points, numKnots, deg, minT);
+	//stdFit(        params, points, numKnots, deg, minT);
 	// lowSVDFit(     params, points, numKnots, deg, maxIter, filename, minT);
 	//lowCrossAppFit(params, points, numKnots, deg, maxIter, filename, false, minT);
-	//lowCrossAppFit(params, points, numKnots, deg, maxIter, filename, true,  minT);
+	lowCrossAppFit(params, points, numKnots, deg, maxIter, filename, true,  minT);
     }
+}
+
+void example_3()
+{
+    // integrate 1/4 exp(sqrt(x^2+y^2) over the unit square
+    // correct answer (from Wolfram cloud) is 0.55886658581726677503
+    // we do so by:
+    // 1. taking a tensor-product basis
+    // 2. sampling points and weights for a high-order quadrature rule
+    // 3. approximating this in the least-squares sense
+    // 4. sampling points and weights sufficient for being precise with this degree
+    // 5. using them to compute the integral and compare it with the correct answer.
+
+    // 1. Take a tensor-product basis for fitting.
+    gsKnotVector<real_t> kv(0.0, 1.0, 0, 4);
+    gsTensorBSplineBasis<2, real_t> fittingBasis(kv, kv);
+
+    // 2. Sample points and weights for a high-order quadrature rule.
+    
+    
 }
 
 void integration()

@@ -34,10 +34,24 @@ public:
 
     gsLowRankFitting(const gsMatrix<T>& params,
 		     const gsMatrix<T>& points,
+		     const gsVector<T>& uWeights,
+		     const gsVector<T>& vWeights,
+		     gsTensorBSplineBasis<2, T>& basis)
+	: gsFitting<T>(params, points, basis),
+	  m_uWeights(matrixUtils::diag(uWeights)),
+	  m_vWeights(matrixUtils::diag(vWeights))
+    {
+    }
+
+    gsLowRankFitting(const gsMatrix<T>& params,
+		     const gsMatrix<T>& points,
 		     gsTensorBSplineBasis<2, T>& basis)
 	: gsFitting<T>(params, points, basis)
     {
 	// Note: Forgetting the <T> leads to a confusing error message.
+	index_t uNpts = math::sqrt(params.cols());
+	m_uWeights = matrixUtils::identity<T>(uNpts);
+	m_vWeights = matrixUtils::identity<T>(uNpts);
     }
 
     void computeCross(bool pivot, index_t maxIter, const std::string& filename);
@@ -73,6 +87,10 @@ protected:
     gsMatrix<T> convertBack(const gsMatrix<T>& points) const;
 
     gsMatrix<T> getErrorsMN(size_t rows) const;
+
+protected:
+
+    gsMatrix<T> m_uWeights, m_vWeights;
 };
 
 template <class T>
@@ -210,7 +228,7 @@ void gsLowRankFitting<T>::computeSVD(index_t maxIter, const std::string& filenam
 	this->m_result = this->m_basis->makeGeometry(give(convertBack(coefs).transpose())).release();
 	this->computeErrors();
 	T maxErr = this->maxPointError();
-	//gsInfo << "err SVD: " << maxErr << std::endl;
+	gsInfo << "err SVD: " << maxErr << std::endl;
 	LIErr.push_back(maxErr);
 	//L2Err.push_back(this->L2Error());
 	dofs.push_back((r+1) * uCoefs.size() * vCoefs.size());
@@ -241,8 +259,8 @@ void gsLowRankFitting<T>::computeCross(bool pivot, index_t maxIter, const std::s
     gsMatrix<T> X(Xs.transpose());
     gsMatrix<T> Y(Ys.transpose());
 
-    gsMatrix<T> uLeast = (X * X.transpose()).inverse() * X;
-    gsMatrix<T> vLeast = (Y * Y.transpose()).inverse() * Y;
+    gsMatrix<T> uLeast = (X * m_uWeights * X.transpose()).inverse() * X * m_uWeights;
+    gsMatrix<T> vLeast = (Y * m_vWeights * Y.transpose()).inverse() * Y * m_vWeights;
 
     gsMatrix<T> U(ptsMN.rows(), ptsMN.cols());
     gsMatrix<T> V(ptsMN.rows(), ptsMN.cols());
@@ -275,7 +293,7 @@ void gsLowRankFitting<T>::computeCross(bool pivot, index_t maxIter, const std::s
 	this->m_result = this->m_basis->makeGeometry(give(convertBack(coefs).transpose())).release();
 	this->computeErrors();
 	T maxErr = this->maxPointError();
-	//gsInfo << "err piv: " << maxErr << std::endl;
+	gsInfo << "err piv: " << maxErr << std::endl;
 	LIErr.push_back(maxErr);
 	L2Err.push_back(L2distFromExp(*static_cast<gsTensorBSpline<2, real_t>*>(this->result())));
 	//L2Err.push_back(this->L2Error());
