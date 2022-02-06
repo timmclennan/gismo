@@ -54,9 +54,9 @@ public:
 	m_vWeights = matrixUtils::identity<T>(uNpts);
     }
 
-    void computeCross(bool pivot, index_t maxIter, const std::string& filename);
+    void computeCross(bool pivot, index_t maxIter, index_t sample, const std::string& filename);
     
-    void computeSVD(index_t maxIter, const std::string& filename);
+    void computeSVD(index_t maxIter, index_t sample, const std::string& filename);
 
     void computeRes();
 
@@ -127,9 +127,12 @@ template <class T>
 index_t gsLowRankFitting<T>::partitionParam(gsMatrix<T>& uPar, gsMatrix<T>& vPar) const
 {
     index_t uNum = 0;
-    for(index_t i=0; this->m_param_values(0, i) != 1; i++)
+    T prevMax = -1 * std::numeric_limits<T>::max();
+    for(index_t i=0; this->m_param_values(0, i) > prevMax; i++)
+    {
 	uNum++;
-    uNum++; // For the last iteration.
+	prevMax = this->m_param_values(0, i);
+    }
     //gsInfo << "uNum: " << uNum << std::endl;
 
     // Separate the u- and v-parameters.
@@ -185,19 +188,19 @@ gsMatrix<T> gsLowRankFitting<T>::getErrorsMN(size_t rows) const
 }
 
 template <class T>
-void gsLowRankFitting<T>::computeSVD(index_t maxIter, const std::string& filename)
+void gsLowRankFitting<T>::computeSVD(index_t maxIter, index_t sample, const std::string& filename)
 {
     
     gsBSplineBasis<T> uBasis = *(static_cast<gsBSplineBasis<T>*>(&(this->m_basis->component(0))));
     gsBSplineBasis<T> vBasis = *(static_cast<gsBSplineBasis<T>*>(&(this->m_basis->component(1))));
 
-    gsMatrix<real_t> coefs(uBasis.size(), vBasis.size());
+    gsMatrix<T> coefs(uBasis.size(), vBasis.size());
     coefs.setZero();
 
     // 0. Convert points to an m x n matrix.
     gsMatrix<T> uPar, vPar;
     index_t uNum = partitionParam(uPar, vPar);
-    gsMatrix<real_t> ptsMN = convertToMN(uNum);
+    gsMatrix<T> ptsMN = convertToMN(uNum);
 
     // 1. Perform an SVD on it.
     gsSvd<T> pointSVD(ptsMN);
@@ -211,17 +214,17 @@ void gsLowRankFitting<T>::computeSVD(index_t maxIter, const std::string& filenam
     for(index_t r=0; r<pointSVD.rank() && r<maxIter; r++)
     {
 	// 2.0. Fit u with the u-basis.
-	gsFitting<real_t> uFitting(uPar, pointSVD.u(r).transpose(), uBasis);
+	gsFitting<T> uFitting(uPar, pointSVD.u(r).transpose(), uBasis);
 	uFitting.compute();
 	// A note to future self: Forgetting about the transpose lead to preconditioners failing.
 
 	// 2.1. Fit v with the v-basis.
-	gsFitting<real_t> vFitting(vPar, pointSVD.v(r).transpose(), vBasis);
+	gsFitting<T> vFitting(vPar, pointSVD.v(r).transpose(), vBasis);
 	vFitting.compute();
 
 	// 2.3. Add the coefficients to the running tensor-product B-spline.
-	gsVector<real_t> uCoefs = uFitting.result()->coefs().col(0);
-	gsVector<real_t> vCoefs = vFitting.result()->coefs().col(0);
+	gsVector<T> uCoefs = uFitting.result()->coefs().col(0);
+	gsVector<T> vCoefs = vFitting.result()->coefs().col(0);
 	coefs += pointSVD.s(r) * matrixUtils::tensorProduct(uCoefs, vCoefs);
 
 	delete this->m_result;
@@ -230,7 +233,7 @@ void gsLowRankFitting<T>::computeSVD(index_t maxIter, const std::string& filenam
 	T maxErr = this->maxPointError();
 	gsInfo << "err SVD: " << maxErr << std::endl;
 	LIErr.push_back(maxErr);
-	//L2Err.push_back(this->L2Error());
+	L2Err.push_back(L2Error(*static_cast<gsTensorBSpline<2, T>*>(this->result()), sample));
 	dofs.push_back((r+1) * uCoefs.size() * vCoefs.size());
     }
 
@@ -241,7 +244,9 @@ void gsLowRankFitting<T>::computeSVD(index_t maxIter, const std::string& filenam
 }
 
 template <class T>
-void gsLowRankFitting<T>::computeCross(bool pivot, index_t maxIter, const std::string& filename)
+void gsLowRankFitting<T>::computeCross(bool pivot,
+				       index_t maxIter, index_t sample,
+				       const std::string& filename)
 {
     gsBSplineBasis<T> uBasis = *(static_cast<gsBSplineBasis<T>*>(&(this->m_basis->component(0))));
     gsBSplineBasis<T> vBasis = *(static_cast<gsBSplineBasis<T>*>(&(this->m_basis->component(1))));
@@ -293,9 +298,10 @@ void gsLowRankFitting<T>::computeCross(bool pivot, index_t maxIter, const std::s
 	this->m_result = this->m_basis->makeGeometry(give(convertBack(coefs).transpose())).release();
 	this->computeErrors();
 	T maxErr = this->maxPointError();
-	gsInfo << "err piv: " << maxErr << std::endl;
+	T l2Err = L2Error(*static_cast<gsTensorBSpline<2, T>*>(this->result()), sample);
+	gsInfo << "max err piv: " << maxErr << ", L2 err piv: " << l2Err << std::endl;
 	LIErr.push_back(maxErr);
-	L2Err.push_back(L2distFromExp(*static_cast<gsTensorBSpline<2, real_t>*>(this->result())));
+	L2Err.push_back(l2Err);
 	//L2Err.push_back(this->L2Error());
     }
 
@@ -318,13 +324,13 @@ void gsLowRankFitting<T>::computeRes()
     gsBSplineBasis<T> uBasis = *(static_cast<gsBSplineBasis<T>*>(&(this->m_basis->component(0))));
     gsBSplineBasis<T> vBasis = *(static_cast<gsBSplineBasis<T>*>(&(this->m_basis->component(1))));
 
-    gsMatrix<real_t> coefs(uBasis.size(), vBasis.size());
+    gsMatrix<T> coefs(uBasis.size(), vBasis.size());
     coefs.setZero();
 
     // 0. Convert points to an m x n matrix.
     gsMatrix<T> uPar, vPar;
     index_t uNum = partitionParam(uPar, vPar);
-    gsMatrix<real_t> ptsMN = convertToMN(uNum);
+    gsMatrix<T> ptsMN = convertToMN(uNum);
 
     gsMatrixCrossApproximation<T> crossApp(ptsMN);
     T sigma = 0;
@@ -338,18 +344,18 @@ void gsLowRankFitting<T>::computeRes()
 	// 2.0. Fit u with the u-basis.
 	// gsInfo << "uPar:\n" << uPar << std::endl;
 	// gsInfo << "uPts:\n" << uVec.transpose() << std::endl;
-	gsFitting<real_t> uFitting(uPar, uVec.transpose(), uBasis);
+	gsFitting<T> uFitting(uPar, uVec.transpose(), uBasis);
 	uFitting.compute();
 	
 	// 2.1. Fit v with the v-basis.
 	// gsInfo << "vPar:\n" << vPar << std::endl;
 	// gsInfo << "vPts:\n" << vVec.transpose() << std::endl;
-	gsFitting<real_t> vFitting(vPar, vVec.transpose(), vBasis);
+	gsFitting<T> vFitting(vPar, vVec.transpose(), vBasis);
 	vFitting.compute();
 
 	// 2.3. Add the coefficients to the running tensor-product B-spline.
-	gsVector<real_t> uCoefs = uFitting.result()->coefs().col(0);
-	gsVector<real_t> vCoefs = vFitting.result()->coefs().col(0);
+	gsVector<T> uCoefs = uFitting.result()->coefs().col(0);
+	gsVector<T> vCoefs = vFitting.result()->coefs().col(0);
 	matrixUtils::addTensorProduct(coefs, sigma, uCoefs, vCoefs);
 
 	delete this->m_result;

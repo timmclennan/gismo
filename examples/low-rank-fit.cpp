@@ -140,7 +140,7 @@ void checkCrossAppMat(index_t example, bool pivot)
 
 template <class T>
 void sampleData(const gsVector<T>& uPar, const gsVector<T>& vPar,
-		gsMatrix<T>& params, gsMatrix<T>& points, index_t example)
+		gsMatrix<T>& params, gsMatrix<T>& points, index_t sample)
 {
     index_t uNum = uPar.size();
     index_t vNum = vPar.size();
@@ -165,33 +165,8 @@ void sampleData(const gsVector<T>& uPar, const gsVector<T>& vPar,
 	    params(0, glob) = u;
 	    params(1, glob) = v;
 
-	    switch(example)
-	    {
-	    case 0:
-		points(0, glob) = math::sin(u  * 2 * EIGEN_PI) * math::sin(v * 2 * EIGEN_PI) * 0.125;
-		break;
-	    case 1:
-		points(0, glob) = math::sin(u  * 2 * EIGEN_PI) * math::sin(v * 2 * EIGEN_PI) * 0.1
-		    + math::cos(u  * 2 * EIGEN_PI) * math::cos(v * 2 * EIGEN_PI) * 0.1;
-		break;
-	    case 2:
-		points(0, glob) = math::sin((u + v) * EIGEN_PI) * 0.125;
-		break;
-	    case 4:
-	    {
-		T arg = 5 * EIGEN_PI * ((u - 0.2) * (u - 0.2) + (v - 0.0) * (v - 0.0));
-		points(0, glob) = (math::sin(arg)) / arg;
-		break;
-	    }
-	    case 5:
-		points(0, glob) = evalExpSqrt(u, v);
-		break;
-	    case 6:
-		points(0, glob) = evalExp(u, v);
-		break;
-	    default:
-		gsWarn << "Unknown example " << example << "." << std::endl;
-	    }
+	    points(0, glob) = evalSample(u, v, sample);
+	    //gsInfo << points(0, glob) << std::endl;
 	}
     }
     // gsInfo << "params:\n" << params << std::endl;
@@ -213,25 +188,25 @@ gsVector<T> sampleUniform(index_t size, T tMin, T tMax)
 
 template <class T>
 void sampleData(index_t uNum, index_t vNum, gsMatrix<T>& params, gsMatrix<T>& points,
-		index_t example,
+		index_t sample,
 		T uMin = 0, T vMin = 0, T uMax = 1, T vMax = 1)
 {
     gsVector<T> uPar = sampleUniform(uNum, uMin, uMax);
     gsVector<T> vPar = sampleUniform(vNum, vMin, vMax);
 
-    sampleData(uPar, vPar, params, points, example);
+    sampleData(uPar, vPar, params, points, sample);
 }
 
 template <class T>
 void sampleData(index_t numSide, gsMatrix<T>& params, gsMatrix<T>& points,
-		index_t example, T tMin = 0, T tMax = 1)
+		index_t sample, T tMin = 0, T tMax = 1)
 {
-    sampleData(numSide, numSide, params, points, example, tMin, tMin, tMax, tMax);
+    sampleData(numSide, numSide, params, points, sample, tMin, tMin, tMax, tMax);
 }
 
 template <class T>
 void sampleDataGre(const gsKnotVector<T>& knotsU, const gsKnotVector<T>& knotsV,
-		   gsMatrix<T>& params, gsMatrix<T>& points, index_t example)
+		   gsMatrix<T>& params, gsMatrix<T>& points, index_t sample)
 {
     gsMatrix<T> greU, greV;
     knotsU.greville_into(greU);
@@ -240,21 +215,115 @@ void sampleDataGre(const gsKnotVector<T>& knotsU, const gsKnotVector<T>& knotsV,
     gsVector<T> uPar = greU.row(0);
     gsVector<T> vPar = greV.row(0);
 
-    sampleData(uPar, vPar, params, points, example);
+    sampleData(uPar, vPar, params, points, sample);
 }
 
 template <class T>
 void sampleDataGre(index_t numSide, gsMatrix<T>& params, gsMatrix<T>& points,
-		   index_t example, T minT = 0, T maxT = 1, index_t deg = 3)
+		   index_t sample, T minT = 0, T maxT = 1, index_t deg = 3)
 {
     gsKnotVector<T> kv(minT, maxT, numSide - deg - 1, deg + 1);
-    sampleDataGre(kv, kv, params, points, example);
+    sampleDataGre(kv, kv, params, points, sample);
+}
+
+template <class T>
+void sampleParamsAndWeights(const gsBSplineBasis<T>& basis,
+			    gsVector<T>& params,
+			    gsVector<T>& weights,
+			    T quA = 1.0,
+			    index_t quB = 1,
+			    bool verbose = false)
+{
+    gsOptionList legendreOpts;
+    legendreOpts.addInt   ("quRule","Quadrature rule used (1) Gauss-Legendre; (2) Gauss-Lobatto; (3) Patch-Rule",gsQuadrature::GaussLegendre);
+    legendreOpts.addReal("quA", "Number of quadrature points: quA*deg + quB", quA);
+    legendreOpts.addInt ("quB", "Number of quadrature points: quA*deg + quB", quB);
+    legendreOpts.addSwitch("overInt","Apply over-integration or not?",false);
+    gsQuadRule<real_t>::uPtr legendre = gsQuadrature::getPtr(basis, legendreOpts);
+
+    params.clear();
+    weights.clear();
+
+    gsMatrix<T> locParams, globParams(1, 0);
+    gsVector<T> locWeights;
+    index_t start;
+
+    for (auto domIt = basis.makeDomainIterator(); domIt->good(); domIt->next() )
+    {
+	if(verbose)
+	{
+	    gsInfo<<"---------------------------------------------------------------------------\n";
+	    gsInfo  <<"Element with corners (lower) "
+		    <<domIt->lowerCorner().transpose()<<" and (higher) "
+		    <<domIt->upperCorner().transpose()<<" :\n";
+	}
+
+	// Gauss-Legendre rule (w/o over-integration)
+	legendre->mapTo(domIt->lowerCorner(), domIt->upperCorner(),
+			locParams, locWeights);
+
+	if (verbose)
+	{
+	    gsInfo  << "* \t Gauss-Legendre\n"
+		    << "- points:\n"  << locParams              <<"\n"
+		    << "- weights:\n" << locWeights.transpose() <<"\n";
+	}
+
+	// Append locParams to globParams.
+	start = globParams.cols();
+	globParams.conservativeResize(Eigen::NoChange, start + locParams.cols());
+	globParams.block(0, start, globParams.rows(), locParams.cols()) = locParams;
+
+	// Append locWeights to weights.
+	weights.conservativeResize(weights.size() + locWeights.size());
+	for(index_t j=0; j<locWeights.size(); j++)
+	    weights(start + j) = locWeights(j);
+    }
+
+    params = globParams.row(0);
+    //gsInfo << "params:\n" << params << std::endl;
+}
+
+template <class T>
+void sampleDataGauss(const gsTensorBSplineBasis<2, T>& basis,
+		     gsMatrix<T>& params,
+		     gsMatrix<T>& points,
+		     gsVector<T>& uWeights,
+		     gsVector<T>& vWeights,
+		     index_t sample,
+		     T       quA = 1.0,
+		     index_t quB = 1)
+{
+    bool verbose = false;
+
+    const gsBSplineBasis<T> uBasis = basis.component(0);
+    const gsBSplineBasis<T> vBasis = basis.component(1);
+
+    gsVector<T> uParams, vParams;
+
+    sampleParamsAndWeights(uBasis, uParams, uWeights, quA, quB, verbose);
+    sampleParamsAndWeights(vBasis, vParams, vWeights, quA, quB, verbose);
+
+    GISMO_ASSERT(uParams.size() == uWeights.size(), "Different number of params and weights in u-direction.");
+    GISMO_ASSERT(vParams.size() == vWeights.size(), "Different number of params and weights in v-direction.");
+
+    // FIXME:
+    GISMO_ASSERT(uParams.size() == vParams.size(), "Problem not symmetric. This is possible in theory but not in the current implementation.");
+
+    // for(index_t i=0; i<uWeights.size(); i++)
+    // {
+    // 	uWeights(i) = math::sqrt(uWeights(i));
+    // 	vWeights(i) = math::sqrt(vWeights(i));
+    // }
+
+    sampleData(uParams, vParams, params, points, sample);
 }
 
 void stdFit(const gsMatrix<real_t>& params,
 	    const gsMatrix<real_t>& points,
 	    index_t numKnots,
 	    index_t deg,
+	    index_t sample,
 	    real_t minU = 0.0,
 	    real_t maxU = 1.0)
 {
@@ -267,7 +336,7 @@ void stdFit(const gsMatrix<real_t>& params,
     gsInfo << "Max err of standard fitting: " << fitting.maxPointError() << std::endl;
     //gsInfo << "L2  err of standard fitting: " << fitting.L2Error() << std::endl;
     gsInfo << "L2 error of standard fitting: "
-	   <<  L2distFromExp(*static_cast<gsTensorBSpline<2, real_t>*>(fitting.result()))
+	   <<  L2Error(*static_cast<gsTensorBSpline<2, real_t>*>(fitting.result()), sample)
 	   << std::endl;
     //gsWriteParaview(*fitting.result(), "fitting", 10000, false, true);
     // gsFileData<real_t> fd;
@@ -279,6 +348,7 @@ void lowSVDFit(const gsMatrix<real_t>& params,
 	       const gsMatrix<real_t>& points,
 	       index_t numKnots,
 	       index_t deg,
+	       index_t sample,
 	       index_t maxIter,
 	       const std::string& filename,
 	       real_t minU = 0.0,
@@ -289,7 +359,7 @@ void lowSVDFit(const gsMatrix<real_t>& params,
 
     gsInfo << "SVD fitting:\n";
     gsLowRankFitting<real_t> fitting(params, points, basis);
-    fitting.computeSVD(maxIter, filename);
+    fitting.computeSVD(maxIter, sample, filename);
 
     //gsWriteParaview(*fitting.result(), "low-rank", 10000, false, true);
 
@@ -302,6 +372,7 @@ void lowCrossAppFit(const gsMatrix<real_t>& params,
 		    const gsMatrix<real_t>& points,
 		    index_t numKnots,
 		    index_t deg,
+		    index_t sample,
 		    index_t maxIter,
 		    const std::string& filename,
 		    bool pivot,
@@ -316,7 +387,7 @@ void lowCrossAppFit(const gsMatrix<real_t>& params,
     if(pivot)
 	gsInfo << " with pivoting";
     gsInfo << ":\n";
-    fitting.computeCross(pivot, maxIter, filename);
+    fitting.computeCross(pivot, maxIter, sample, filename);
 
     //gsWriteParaview(*fitting.result(), "low-rank", 10000, false, true);
 
@@ -399,9 +470,10 @@ void development()
     //checkSvd();
     gsMatrix<real_t> params, points;
     real_t minT = -1.0; // -1 leads to a confusion index_t / real_t.
+    index_t sample = 4;
     //real_t minT = 0;
     //sampleData(10, params, points, 5, minT);
-    sampleDataGre(10, params, points, 4, minT, 1.0, 2);
+    sampleDataGre(10, params, points, sample, minT, 1.0, 2);
     //sampleDataGre(50, params, points, 6, minT, 1.0, 2);
     // Experience: for examples 0 and 1 (rank 1 and 2, respectively),
     // we obtain the same precision as the standard fit after rank
@@ -411,10 +483,10 @@ void development()
     index_t deg = 2;
     index_t maxIter = 5;
     std::string filename = "old";
-    stdFit(        params, points, numKnots, deg, minT);
-    lowSVDFit(     params, points, numKnots, deg, maxIter, filename, minT);
-    lowCrossAppFit(params, points, numKnots, deg, maxIter, filename, false, minT);
-    lowCrossAppFit(params, points, numKnots, deg, maxIter, filename, true,  minT);
+    stdFit(        params, points, numKnots, deg, sample, minT);
+    lowSVDFit(     params, points, numKnots, deg, sample, maxIter, filename, minT);
+    lowCrossAppFit(params, points, numKnots, deg, sample, maxIter, filename, false, minT);
+    lowCrossAppFit(params, points, numKnots, deg, sample, maxIter, filename, true,  minT);
     //lowCrossResFit(params, points, numKnots, deg);
     //checkCrossApp(false);
     //checkCrossApp(3, true);
@@ -423,8 +495,26 @@ void development()
     //param();
 }
 
+void example_1()
+{
+    gsMatrix<real_t> params, points;
+    real_t minT = -1.0;
+    index_t sample = 4;
+    sampleData(500, params, points, sample, minT);
+
+    std::vector<index_t> numKnots(2);
+    numKnots[0] = 46;
+    numKnots[1] = 96;
+
+    // for(auto it=dataSizes.begin(); it!=dataSizes.end(); ++it)
+    // {
+    // 	// TODO: Hack here.
+    // }
+}
+
 void example_2()
 {
+    index_t sample = 6;
     std::vector<index_t> dataSizes(2);
     dataSizes[0] = 50;
     dataSizes[1] = 100;
@@ -435,7 +525,7 @@ void example_2()
     {
 	gsMatrix<real_t> params, points;
 	real_t minT = -1.0; // -1 leads to a confusion index_t / real_t.
-	sampleDataGre(*it, params, points, 6, minT, 1.0, 2);
+	sampleDataGre(*it, params, points, sample, minT, 1.0, 2);
 
 	index_t deg = 2;
 	index_t numKnots = *it - deg - 1;
@@ -446,43 +536,67 @@ void example_2()
 	//stdFit(        params, points, numKnots, deg, minT);
 	// lowSVDFit(     params, points, numKnots, deg, maxIter, filename, minT);
 	//lowCrossAppFit(params, points, numKnots, deg, maxIter, filename, false, minT);
-	lowCrossAppFit(params, points, numKnots, deg, maxIter, filename, true,  minT);
+	lowCrossAppFit(params, points, numKnots, deg, sample, maxIter, filename, true,  minT);
     }
 }
 
 void example_3()
 {
-    // integrate 1/4 exp(sqrt(x^2+y^2) over the unit square
-    // correct answer (from Wolfram cloud) is 0.55886658581726677503
-    // we do so by:
-    // 1. taking a tensor-product basis
-    // 2. sampling points and weights for a high-order quadrature rule
-    // 3. approximating this in the least-squares sense
-    // 4. sampling points and weights sufficient for being precise with this degree
-    // 5. using them to compute the integral and compare it with the correct answer.
+    // Integrate 1/4 exp(sqrt(x^2+y^2) over the unit square.
+    // The correct answer (from Wolfram cloud) is 0.55886658581726677503.
+    index_t numDOF = 100;
 
     // 1. Take a tensor-product basis for fitting.
-    gsKnotVector<real_t> kv(0.0, 1.0, 0, 4);
+    index_t deg = 3;
+    index_t numKnots = numDOF - deg -1;
+    real_t tMin = -1.0;
+    real_t tMax =  1.0;
+    gsKnotVector<real_t> kv(tMin, tMax, numKnots, deg + 1);
     gsTensorBSplineBasis<2, real_t> fittingBasis(kv, kv);
 
     // 2. Sample points and weights for a high-order quadrature rule.
-    
-    
+    index_t sample = 6;
+    gsVector<real_t> uWeights, vWeights;
+    gsMatrix<real_t> params, points;
+    sampleDataGauss<real_t>(fittingBasis, params, points, uWeights, vWeights, sample, 2.0, 3);
+    gsInfo << "Sampled " << params.cols() << " points, fitting with "
+	   << fittingBasis.size() << " DOF." << std::endl;
+
+    // 3. Approximate in the least-squares sense.
+    index_t maxIter = 20;
+    std::string filename = "example-3-case-6-weighted";
+
+    gsLowRankFitting<real_t> fitting(params, points, uWeights, vWeights, fittingBasis);
+    gsInfo << "CrossApp fitting with weights and pivoting:\n";
+    //gsInfo << "Params (" << params.rows() << "x" << params.cols() << "):\n" << params << std::endl;
+    //gsInfo << "Points (" << points.rows() << "x" << points.cols() << "):\n" << points << std::endl;
+    fitting.computeCross(true, maxIter, sample, filename);
+
+    // 4. Compare with the full fitting without weights.
+    stdFit(params, points, numKnots, deg, sample, tMin);
+
+    // 5. Compare with Irina & Clemens using the same spline space.
+    sampleDataGre(numDOF, params, points, sample, tMin, tMax, deg);
+    gsInfo << "Sampled " << params.cols() << " points, fitting with "
+	   << fittingBasis.size() << " DOF." << std::endl;
+    filename = "example-3-case-6-inter100";
+    lowCrossAppFit(params, points, numKnots, deg, sample, maxIter, filename, true, tMin);
+
+    // 6. And finally full fitting in these points.
+    stdFit(params, points, numKnots, deg, sample, tMin);
 }
 
-void integration()
+void example_4()
 {
-    gsFileData<> fileData("surfaces/simple.xml");
-    gsGeometry<>::uPtr pGeom = fileData.getFirst< gsGeometry<> >();
-    gsTensorBSpline<2, real_t> *spline = static_cast<gsTensorBSpline<2, real_t>*>(pGeom.get());
-    gsInfo << *spline << std::endl;
-    gsInfo << "The quadrature rule returned: " << L2distFromExp(*spline, true) << std::endl;
+    gsInfo << "Hello, world!" << std::endl;
 }
 
 int main()
 {
     //development();
-    example_2();
-    //integration();
+    //example_1();
+    //example_2();
+    //example_3();
+    example_4();
     return 0;    
 }

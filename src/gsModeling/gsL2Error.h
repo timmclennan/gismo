@@ -20,20 +20,43 @@ namespace gismo
 {
 
     template <class T>
-    T evalExp(T u, T v)
+    T evalSample(T u, T v, index_t example)
     {
-	return (2.0 / 3) * (math::exp(-1 * math::sqrt((10 * u - 3) * (10 * u - 3)
-						      +
-						      (10 * v - 3) * (10 * v - 3)))
-			    +
-			    math::exp(-1 * math::sqrt((10 * u + 3) * (10 * u + 3)
-						      +
-						      (10 * v + 3) * (10 * v + 3)))
-			    );
+	switch(example)
+	{
+	case 0:
+	    return math::sin(u  * 2 * EIGEN_PI) * math::sin(v * 2 * EIGEN_PI) * 0.125;
+	case 1:
+	    return math::sin(u  * 2 * EIGEN_PI) * math::sin(v * 2 * EIGEN_PI) * 0.1
+		+ math::cos(u  * 2 * EIGEN_PI) * math::cos(v * 2 * EIGEN_PI) * 0.1;
+	case 2:
+	    return math::sin((u + v) * EIGEN_PI) * 0.125;
+	case 4:
+	{
+	    T arg = 5 * EIGEN_PI * ((u - 0.2) * (u - 0.2) + (v - 0.0) * (v - 0.0));
+	    return math::sin(arg) / arg;
+	}
+	case 5:
+	    return 0.25 * math::exp(math::sqrt(u * u + v * v));	    
+	case 6:
+	    return (2.0 / 3) * (math::exp(-1 * math::sqrt((10 * u - 3) * (10 * u - 3)
+							  +
+							  (10 * v - 3) * (10 * v - 3)))
+				+
+				math::exp(-1 * math::sqrt((10 * u + 3) * (10 * u + 3)
+							  +
+							  (10 * v + 3) * (10 * v + 3)))
+				);
+	case 7:
+	    return T(0);
+	default:
+	    gsWarn << "Unknown example " << example << "." << std::endl;
+	    return 0;
+	}
     }
 
     template <class T>
-    T L2distFromExp(const gsTensorBSpline<2, T>& spline, bool verbose = false)
+    T L2Error(const gsTensorBSpline<2, T>& spline, index_t sample, bool verbose = false)
     {
 	gsOptionList legendreOpts;
 	legendreOpts.addInt   ("quRule","Quadrature rule used (1) Gauss-Legendre; (2) Gauss-Lobatto; (3) Patch-Rule",gsQuadrature::GaussLegendre);
@@ -66,79 +89,10 @@ namespace gismo
 
 	    spline.eval_into(points, values);
 	    for(index_t j=0; j<values.cols(); j++)
-		result += weights(j) * math::pow(values(0, j) - evalExp(points(0, j), points(1, j)), 2);
+		result += weights(j) *
+		    math::pow(values(0, j) - evalSample(points(0, j), points(1, j), sample), 2);
 	}
 	return math::sqrt(result);
     }
-
-    template <class T>
-    T evalExpSqrt(T u, T v)
-    {
-	return 0.25 * math::exp(math::sqrt(u * u + v * v));
-    }
-
-    /*template <class T>
-    void samplePtsAndWeights(const gsTensorBSpline<2, T>& spline)
-    {
-	bool verbose = false;
-
-	const gsBSplineBasis<T> uBasis = spline.basis().component(0);
-	const gsBSplineBasis<T> vBasis = spline.basis().component(1);
-
-	gsOptionList legendreOpts;
-	legendreOpts.addInt   ("quRule","Quadrature rule used (1) Gauss-Legendre; (2) Gauss-Lobatto; (3) Patch-Rule",gsQuadrature::GaussLegendre);
-	legendreOpts.addReal("quA", "Number of quadrature points: quA*deg + quB", 1.0  );
-	legendreOpts.addInt ("quB", "Number of quadrature points: quA*deg + quB", 1    );
-	legendreOpts.addSwitch("overInt","Apply over-integration or not?",false);
-	gsQuadRule<real_t>::uPtr uLegendre = gsQuadrature::getPtr(uBasis, legendreOpts);
-	gsQuadRule<real_t>::uPtr vLegendre = gsQuadrature::getPtr(vBasis, legendreOpts);
-
-	for(auto vIt = vBasis.makeDomainIterator(); vIt->good(); vIt->next())
-	{
-	for(auto uIt = uBasis.makeDomainIterator(); uIt->good(); uIt->next())
-	{
-	    gsMatrix<T> uParams, uWeights;
-	    uLegendre->mapTo(uIt->lowerCorner(), uIt->upperCorner(), uParams, uWeights);
-	}
-
-	gsMatrix<T> points;
-	gsVector<T> weights;
-	gsMatrix<T> values;
-
-	gsMatrix<T> GaussRule(spline.dim(), 0);
-	index_t start;
-
-	for (auto domIt = spline.basis().makeDomainIterator(); domIt->good(); domIt->next() )
-	{
-	    if(verbose)
-	    {
-		gsInfo<<"---------------------------------------------------------------------------\n";
-		gsInfo  <<"Element with corners (lower) "
-			<<domIt->lowerCorner().transpose()<<" and (higher) "
-			<<domIt->upperCorner().transpose()<<" :\n";
-	    }
-
-	    // Gauss-Legendre rule (w/o over-integration)
-	    legendre->mapTo(domIt->lowerCorner(), domIt->upperCorner(),
-			    points, weights);
-
-	    if (verbose)
-	    {
-		gsInfo  <<"* \t Gauss-Legendre\n"
-			<<"- points:\n"<<points<<"\n"
-			<<"- weights:\n"<<weights.transpose()<<"\n";
-	    }
-	    start = GaussRule.cols();
-	    GaussRule.conservativeResize(Eigen::NoChange,GaussRule.cols()+points.cols());
-	    GaussRule.block(0,start,GaussRule.rows(),points.cols()) = points;
-
-	    if(verbose)
-		gsInfo << "The rule uses " << points.cols() << " points." << std::endl;
-
-	    spline.eval_into(points, values);
-	    for(index_t j=0; j<values.cols(); j++)
-		result += weights(j) * math::pow(values(0, j) - evalExp(points(0, j), points(1, j)), 2);
-	}
-	}*/
     
 } // namespace gismo
