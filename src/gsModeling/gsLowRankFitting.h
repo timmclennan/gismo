@@ -18,6 +18,7 @@
 #include <gsMatrix/gsMatrixUtils.h>
 #include <gsMatrix/gsMatrixCrossApproximation.h>
 #include <gsModeling/gsL2Error.h>
+#include <gsIO/gsWriteGnuplot.h>
 
 namespace gismo
 {
@@ -37,10 +38,10 @@ public:
 		     const gsVector<T>& uWeights,
 		     const gsVector<T>& vWeights,
 		     gsTensorBSplineBasis<2, T>& basis)
-	: gsFitting<T>(params, points, basis),
-	  m_uWeights(matrixUtils::diag(uWeights)),
-	  m_vWeights(matrixUtils::diag(vWeights))
+	: gsFitting<T>(params, points, basis)
     {
+	initPQ(matrixUtils::diag(uWeights),
+	       matrixUtils::diag(vWeights));
     }
 
     gsLowRankFitting(const gsMatrix<T>& params,
@@ -50,15 +51,19 @@ public:
     {
 	// Note: Forgetting the <T> leads to a confusing error message.
 	index_t uNpts = math::sqrt(params.cols());
-	m_uWeights = matrixUtils::identity<T>(uNpts);
-	m_vWeights = matrixUtils::identity<T>(uNpts);
+	initPQ(matrixUtils::identity<T>(uNpts),
+	       matrixUtils::identity<T>(uNpts));
     }
 
-    void computeCross(bool pivot, index_t maxIter, index_t sample, const std::string& filename);
+    void computeCross(bool pivot, index_t maxIter, index_t sample);
     
     void computeSVD(index_t maxIter, index_t sample, const std::string& filename);
 
     void computeRes();
+
+    T methodB();
+
+    T methodC(index_t maxIter);
 
     void CR2I_old(const gsMatrix<T>& bott,
 		  const gsMatrix<T>& left,
@@ -72,13 +77,27 @@ public:
 
     //T L2error() const;
 
+    inline void exportL2Err(const std::string& filename) const
+    {
+	gsWriteGnuplot(m_L2Err, filename);
+    }
+
+    inline void exportMaxErr(const std::string& filename) const
+    {
+	gsWriteGnuplot(m_MaxErr, filename);
+    }
+
+    inline const std::vector<T>& getL2Err() const
+    {
+	return m_L2Err;
+    }
+
+    inline const std::vector<T>& getMaxErr() const
+    {
+	return m_MaxErr;
+    }
+
 protected:
-
-    void gsWriteGnuplot(const std::vector<T>& xData,
-			const std::vector<T>& yData,
-			const std::string& filename) const;
-
-    void gsWriteGnuplot(const std::vector<T>& data, const std::string& filename) const;
 
     index_t partitionParam(gsMatrix<T>& uPar, gsMatrix<T>& vPar) const;
 
@@ -88,40 +107,16 @@ protected:
 
     gsMatrix<T> getErrorsMN(size_t rows) const;
 
+    void initPQ(const gsMatrix<T>& uWeights, const gsMatrix<T>& vWeights);
+
 protected:
 
-    gsMatrix<T> m_uWeights, m_vWeights;
+    gsMatrix<T> m_uWeights, m_vWeights; // TODO: remove!
+
+    gsMatrix<T> m_P, m_Q; // The matrices P and Q from the paper.
+
+    std::vector<T> m_L2Err, m_MaxErr;
 };
-
-template <class T>
-void gsLowRankFitting<T>::gsWriteGnuplot(const std::vector<T>& xData,
-					 const std::vector<T>& yData,
-					 const std::string& filename) const
-{
-    GISMO_ASSERT(xData.size() == yData.size(), "differring data sizes when writing to gnuplot");
-
-    std::ofstream fout;
-    fout.open(filename, std::ofstream::out);
-    fout << "# x y\n";
-    for(size_t i=0; i<xData.size(); i++)
-    	fout << "  " << xData[i] << "   " << yData[i] << "\n";
-    fout.close();	
-}
-
-template <class T>
-void gsLowRankFitting<T>::gsWriteGnuplot(const std::vector<T>& data, const std::string& filename) const
-{
-    // Note: before converting this to use the overloaded function
-    // think about data types (T vs. index_t).
-
-    std::ofstream fout;
-    fout.open(filename, std::ofstream::out);
-    fout << "# x y\n";
-    for(size_t i=0; i<data.size(); i++)
-    	fout << "  " << i+1 << "   " << data[i] << "\n";
-    fout.close();
-}
-
 
 template <class T>
 index_t gsLowRankFitting<T>::partitionParam(gsMatrix<T>& uPar, gsMatrix<T>& vPar) const
@@ -188,6 +183,26 @@ gsMatrix<T> gsLowRankFitting<T>::getErrorsMN(size_t rows) const
 }
 
 template <class T>
+void gsLowRankFitting<T>::initPQ(const gsMatrix<T>& uWeights, const gsMatrix<T>& vWeights)
+{
+    gsBSplineBasis<T> uBasis = *(static_cast<gsBSplineBasis<T>*>(&(this->m_basis->component(0))));
+    gsBSplineBasis<T> vBasis = *(static_cast<gsBSplineBasis<T>*>(&(this->m_basis->component(1))));
+
+    gsMatrix<T> uPar, vPar;
+    //index_t uNum = partitionParam(uPar, vPar);
+    partitionParam(uPar, vPar);
+
+    gsSparseMatrix<T> Xs, Ys;
+    uBasis.collocationMatrix(uPar, Xs);
+    vBasis.collocationMatrix(vPar, Ys);
+    gsMatrix<T> X(Xs.transpose());
+    gsMatrix<T> Y(Ys.transpose());
+
+    m_P = (X * uWeights * X.transpose()).inverse() * X * uWeights;
+    m_Q = (Y * vWeights * Y.transpose()).inverse() * Y * vWeights;
+}
+
+template <class T>
 void gsLowRankFitting<T>::computeSVD(index_t maxIter, index_t sample, const std::string& filename)
 {
     
@@ -245,76 +260,42 @@ void gsLowRankFitting<T>::computeSVD(index_t maxIter, index_t sample, const std:
 
 template <class T>
 void gsLowRankFitting<T>::computeCross(bool pivot,
-				       index_t maxIter, index_t sample,
-				       const std::string& filename)
+				       index_t maxIter,
+				       index_t sample)
 {
-    gsBSplineBasis<T> uBasis = *(static_cast<gsBSplineBasis<T>*>(&(this->m_basis->component(0))));
-    gsBSplineBasis<T> vBasis = *(static_cast<gsBSplineBasis<T>*>(&(this->m_basis->component(1))));
-
-    gsMatrix<T> coefs(uBasis.size(), vBasis.size());
+    gsMatrix<T> coefs(this->m_basis->component(0).size(),
+		      this->m_basis->component(1).size());
     coefs.setZero();
 
-    gsMatrix<T> uPar, vPar;
-    index_t uNum = partitionParam(uPar, vPar);
+    index_t uNum = math::sqrt(this->m_param_values.cols());
     gsMatrix<T> ptsMN = convertToMN(uNum);
 
-    gsSparseMatrix<T> Xs, Ys;
-    uBasis.collocationMatrix(uPar, Xs);
-    vBasis.collocationMatrix(vPar, Ys);
-    gsMatrix<T> X(Xs.transpose());
-    gsMatrix<T> Y(Ys.transpose());
-
-    gsMatrix<T> uLeast = (X * m_uWeights * X.transpose()).inverse() * X * m_uWeights;
-    gsMatrix<T> vLeast = (Y * m_vWeights * Y.transpose()).inverse() * Y * m_vWeights;
-
-    gsMatrix<T> U(ptsMN.rows(), ptsMN.cols());
-    gsMatrix<T> V(ptsMN.rows(), ptsMN.cols());
-    gsMatrix<T> TT(ptsMN.cols(), ptsMN.cols());
-    U.setZero();
-    TT.setZero();
-    V.setZero();
-    
     gsMatrixCrossApproximation<T> crossApp(ptsMN);
     T sigma;
     gsVector<T> uVec, vVec;
-    std::vector<T> LIErr;
-    std::vector<T> L2Err;
-    for(index_t i=0; i<maxIter && crossApp.nextIteration(sigma, uVec, vVec, pivot); i++)
+    T prevErr = 1e8;
+    bool scnm = true; // Stopping Criterium Not Met
+    for(index_t i=0; i<maxIter && crossApp.nextIteration(sigma, uVec, vVec, pivot) && scnm; i++)
     {
-	// U.col(i) = uVec;
-	// V.col(i) = vVec;
-	// TT(i ,i) = sigma;
-
 	gsMatrix<T> uMat(uVec.size(), 1);
 	gsMatrix<T> vMat(vVec.size(), 1);
 	uMat.col(0) = uVec;
 	vMat.col(0) = vVec;
 
-	coefs = coefs + sigma * (uLeast * uMat * (vLeast * vMat).transpose());
-
-	//}
-	//coefs = uLeast * U * TT * V.transpose() * vLeast.transpose();
+	coefs = coefs + sigma * (m_P * uMat * (m_Q * vMat).transpose());
 	delete this->m_result;
 	this->m_result = this->m_basis->makeGeometry(give(convertBack(coefs).transpose())).release();
 	this->computeErrors();
 	T maxErr = this->maxPointError();
 	T l2Err = L2Error(*static_cast<gsTensorBSpline<2, T>*>(this->result()), sample);
 	gsInfo << "max err piv: " << maxErr << ", L2 err piv: " << l2Err << std::endl;
-	LIErr.push_back(maxErr);
-	L2Err.push_back(l2Err);
-	//L2Err.push_back(this->L2Error());
+	scnm = (l2Err < prevErr);
+	if(!scnm)
+	    gsInfo << "Finishing at rank " << i+1 << "." << std::endl;
+	prevErr = l2Err;
+	m_MaxErr.push_back(maxErr);
+	m_L2Err.push_back(l2Err);
     }
-
-    if(pivot)
-    {
-	gsWriteGnuplot(LIErr, filename + "piv_max.dat");
-	gsWriteGnuplot(L2Err, filename + "piv_L2.dat");
-    }
-    else
-    {
-	gsWriteGnuplot(LIErr, filename + "full_max.dat");
-	gsWriteGnuplot(L2Err, filename + "full_L2.dat");
-    }	
     //gsWriteParaview(*this->m_result, "result");
 }
 
@@ -368,6 +349,80 @@ void gsLowRankFitting<T>::computeRes()
 
     // 3. Make a convergence graph.
 }
+
+template <class T>
+T gsLowRankFitting<T>::methodB()
+{
+    gsBSplineBasis<T> uBasis = *(static_cast<gsBSplineBasis<T>*>(&(this->m_basis->component(0))));
+    gsBSplineBasis<T> vBasis = *(static_cast<gsBSplineBasis<T>*>(&(this->m_basis->component(1))));
+
+    gsMatrix<T> uPar, vPar;
+    index_t uNum = partitionParam(uPar, vPar);
+
+    // Note that X and Y are transposed w.r.t the paper.
+    gsSparseMatrix<T> Xs, Ys;
+    uBasis.collocationMatrix(uPar, Xs);
+    vBasis.collocationMatrix(vPar, Ys);
+    gsMatrix<T> X(Xs.transpose());
+    gsMatrix<T> Y(Ys.transpose());
+
+    gsMatrix<T> Z = convertToMN(uNum);
+
+    gsStopwatch time;
+    time.restart();
+    gsMatrix<T> lhs1 = X * X.transpose();
+    gsMatrix<T> rhs1 = X * Z;
+    typename Eigen::PartialPivLU<typename gsMatrix<T>::Base> eq1(lhs1);
+    gsMatrix<T> D = eq1.solve(rhs1);
+
+    gsMatrix<T> lhs2 = Y * Y.transpose();
+    gsMatrix<T> rhs2 = Y * (D.transpose());
+    typename Eigen::PartialPivLU<typename gsMatrix<T>::Base> eq2(lhs2);
+    gsMatrix<T> CT = eq2.solve(rhs2);
+    time.stop();
+
+    delete this->m_result;
+    this->m_result = this->m_basis->makeGeometry(give(convertBack(CT.transpose()).transpose())).release();
+    this->computeErrors();
+    gsInfo << "method B: " << this->maxPointError() << std::endl;
+    gsWriteParaview(*this->m_result, "result");
+    return time.elapsed();
+}
+
+template <class T>
+T gsLowRankFitting<T>::methodC(index_t maxIter)
+{
+    gsMatrix<T> coefs(this->m_basis->component(0).size(),
+		      this->m_basis->component(1).size());
+    coefs.setZero();
+
+    index_t uNum = math::sqrt(this->m_param_values.cols());
+    gsMatrix<T> ptsMN = convertToMN(uNum);
+
+    gsMatrixCrossApproximation<T> crossApp(ptsMN);
+    T sigma;
+    gsVector<T> uVec, vVec;
+    gsStopwatch time;
+    time.restart();
+    for(index_t i=0; i<maxIter && crossApp.nextIteration(sigma, uVec, vVec, true); i++)
+    {
+	gsMatrix<T> uMat(uVec.size(), 1);
+	gsMatrix<T> vMat(vVec.size(), 1);
+	uMat.col(0) = uVec;
+	vMat.col(0) = vVec;
+
+	coefs = coefs + sigma * (m_P * uMat * (m_Q * vMat).transpose());
+    }
+    time.stop();
+
+    delete this->m_result;
+    this->m_result = this->m_basis->makeGeometry(give(convertBack(coefs).transpose())).release();
+    this->computeErrors();
+    gsInfo << "method C: " << this->maxPointError() << std::endl;
+    gsWriteParaview(*this->m_result, "result");
+    return time.elapsed();
+}
+
 
 template <class T>
 void gsLowRankFitting<T>::CR2I_old(const gsMatrix<T>& bott,

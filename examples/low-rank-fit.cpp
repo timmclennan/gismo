@@ -1,6 +1,7 @@
 #include <gismo.h>
 #include <gsModeling/gsLowRankFitting.h>
 #include <gsModeling/gsL2Error.h>
+#include <gsIO/gsWriteGnuplot.h>
 
 #include <random>
 
@@ -319,29 +320,31 @@ void sampleDataGauss(const gsTensorBSplineBasis<2, T>& basis,
     sampleData(uParams, vParams, params, points, sample);
 }
 
-void stdFit(const gsMatrix<real_t>& params,
-	    const gsMatrix<real_t>& points,
-	    index_t numKnots,
-	    index_t deg,
-	    index_t sample,
-	    real_t minU = 0.0,
-	    real_t maxU = 1.0)
+real_t stdFit(const gsMatrix<real_t>& params,
+	      const gsMatrix<real_t>& points,
+	      index_t numKnots,
+	      index_t deg,
+	      index_t sample,
+	      real_t minU = 0.0,
+	      real_t maxU = 1.0)
 {
-    gsKnotVector<> knots(minU, maxU, numKnots, deg+1);
-    gsTensorBSplineBasis<2> basis(knots, knots);
+    gsKnotVector<real_t> knots(minU, maxU, numKnots, deg+1);
+    gsTensorBSplineBasis<2, real_t> basis(knots, knots);
     
     gsFitting<real_t> fitting(params, points, basis);
     fitting.compute();
     fitting.computeErrors();
     gsInfo << "Max err of standard fitting: " << fitting.maxPointError() << std::endl;
     //gsInfo << "L2  err of standard fitting: " << fitting.L2Error() << std::endl;
+    real_t L2Err = L2Error(*static_cast<gsTensorBSpline<2, real_t>*>(fitting.result()), sample);
     gsInfo << "L2 error of standard fitting: "
-	   <<  L2Error(*static_cast<gsTensorBSpline<2, real_t>*>(fitting.result()), sample)
+	   << L2Err
 	   << std::endl;
     //gsWriteParaview(*fitting.result(), "fitting", 10000, false, true);
     // gsFileData<real_t> fd;
     // fd << *fitting.result();
     // fd.dump("fitting");
+    return L2Err;
 }
 
 void lowSVDFit(const gsMatrix<real_t>& params,
@@ -387,7 +390,11 @@ void lowCrossAppFit(const gsMatrix<real_t>& params,
     if(pivot)
 	gsInfo << " with pivoting";
     gsInfo << ":\n";
-    fitting.computeCross(pivot, maxIter, sample, filename);
+    fitting.computeCross(pivot, maxIter, sample);
+    if(pivot)
+	fitting.exportL2Err(filename + "piv_L2.dat");
+    else
+	fitting.exportL2Err(filename + "full_L2.dat");
 
     //gsWriteParaview(*fitting.result(), "low-rank", 10000, false, true);
 
@@ -570,7 +577,8 @@ void example_3()
     gsInfo << "CrossApp fitting with weights and pivoting:\n";
     //gsInfo << "Params (" << params.rows() << "x" << params.cols() << "):\n" << params << std::endl;
     //gsInfo << "Points (" << points.rows() << "x" << points.cols() << "):\n" << points << std::endl;
-    fitting.computeCross(true, maxIter, sample, filename);
+    fitting.computeCross(true, maxIter, sample);
+    fitting.exportL2Err(filename + "piv_L2.dat");
 
     // 4. Compare with the full fitting without weights.
     stdFit(params, points, numKnots, deg, sample, tMin);
@@ -588,7 +596,167 @@ void example_3()
 
 void example_4()
 {
-    gsInfo << "Hello, world!" << std::endl;
+    index_t sample = 4; // TODO: Choose!
+    index_t deg = 3;
+    index_t maxIter = 10;
+    real_t tMin = -1;
+    real_t tMax = 1;
+    index_t nExperiments = 6;
+
+    gsMatrix<real_t> params, points;
+
+    std::vector<index_t> numDOF(nExperiments);
+    numDOF[0] = 16;
+    numDOF[1] = 32;
+    numDOF[2] = 64;
+    numDOF[3] = 128;
+    numDOF[4] = 256;
+    numDOF[5] = 512;
+    sampleDataGre(512, params, points, sample, tMin, tMax, deg);
+
+    std::vector<real_t> stdL2Err;
+    std::vector<std::vector<real_t>> lowL2Err;
+    std::vector<real_t> knotSpans;
+    for(auto it=numDOF.begin(); it!=numDOF.end(); ++it)
+    {
+	index_t numKnots = *it - deg - 1;
+	stdL2Err.push_back(stdFit(params, points, numKnots, deg, sample, tMin));
+
+	gsKnotVector<real_t> knots(tMin, tMax, numKnots, deg+1);
+	// Remember h.
+	knotSpans.push_back(knots.maxIntervalLength());
+	gsTensorBSplineBasis<2, real_t> basis(knots, knots);
+	gsLowRankFitting<real_t> lowRankFitting(params, points, basis);
+	lowRankFitting.computeCross(true, maxIter, sample);
+	lowL2Err.push_back(lowRankFitting.getL2Err());
+    }
+
+    // Compute total number of DOF.
+    std::vector<real_t> totDOF(numDOF.size());
+    for(size_t i=0; i<numDOF.size(); i++)
+	totDOF[i] = numDOF[i] * numDOF[i];
+
+    gsWriteGnuplot(totDOF, stdL2Err, "example-4-std.dat");
+
+    for(index_t j=0; j<maxIter; j++)
+    {
+	std::vector<real_t> curr;
+	for(size_t i=0; i<numDOF.size(); i++)
+	    if(size_t(j) < lowL2Err[i].size())
+		curr.push_back(lowL2Err[i][j]);
+
+	if(curr.size() > 0)
+	    gsWriteGnuplot(totDOF, curr, "example-4-rank-" + std::to_string(j+1) + ".dat");
+    }
+
+    // Print the LaTeX table with errors.
+    gsInfo << "rank \\textbackslash $h$";
+    for(auto it=knotSpans.begin(); it!=knotSpans.end(); ++it)
+	gsInfo << " & " << *it;
+    gsInfo << " \\\\" << std::endl;
+
+    for(index_t j=0; j<maxIter; j++)
+    {
+	gsInfo << j+1 << " & ";
+	for(index_t i=0; i<nExperiments; i++)
+	{
+	    if(size_t(j) < lowL2Err[i].size())
+		gsInfo << lowL2Err[i][j];
+	    else
+		gsInfo << " - ";
+	    if(i == nExperiments - 1)
+		gsInfo << "\\\\" << std::endl; // We need quadruple backslash, because a double backslash prints as a single backslash.
+	    else
+		gsInfo << " & ";
+	}
+    }
+}
+
+void example_5()
+{
+    index_t sample = 4; // TODO: Choose!
+    index_t deg = 3;
+    real_t tMin = -1;
+    real_t tMax = 1;
+
+    gsMatrix<real_t> params, points;
+
+    index_t numDOF = 32;
+
+    std::vector<real_t> stdL2Err;
+    index_t numKnots = numDOF - deg - 1;
+    // TODO: Sampling 32 points and fitting them with 32 DOF does not converge (!).
+    sampleDataGre(512, params, points, sample, tMin, tMax, deg);
+
+    gsInfo << "params: " << params.rows() << " x " << params.cols() << std::endl;
+
+    gsKnotVector<real_t> knots(tMin, tMax, numKnots, deg+1);
+    gsTensorBSplineBasis<2, real_t> basis(knots, knots);
+
+    gsInfo << "basis:\n" << basis << std::endl;
+    gsLowRankFitting<real_t> lowRankFitting(params, points, basis);
+    lowRankFitting.computeCross(true, 50, sample);
+
+    stdFit(params, points, numKnots, deg, sample, tMin);
+}
+
+void example_6()
+{
+    index_t sample  = 4; // TODO: It would be good to have a function not from Irina & Clemens.
+    index_t deg = 3;
+    real_t tMin = -1;
+    real_t tMax = 1;
+    index_t nExperiments = 7;
+
+    gsMatrix<real_t> params, points;
+
+    std::vector<index_t> numDOF(nExperiments);
+    numDOF[0] = 16;
+    numDOF[1] = 32;
+    numDOF[2] = 64;
+    numDOF[3] = 128;
+    numDOF[4] = 256;
+    numDOF[5] = 512;
+    numDOF[6] = 1024;
+    sampleDataGre(1024, params, points, sample, tMin, tMax, deg);
+
+    std::vector<index_t> maxRanks(4);
+    maxRanks[0] = 5;
+    maxRanks[1] = 10;
+    maxRanks[2] = 15;
+    maxRanks[3] = 20;
+
+    std::vector<real_t> timesB;
+    gsMatrix<real_t> timesC(numDOF.size(), maxRanks.size());
+    gsStopwatch time;
+    for(size_t i=0; i<numDOF.size(); i++)
+    {
+	index_t numKnots = numDOF[i] - deg - 1;
+
+	gsKnotVector<real_t> knots(tMin, tMax, numKnots, deg+1);
+	gsTensorBSplineBasis<2, real_t> basis(knots, knots);
+	gsLowRankFitting<real_t> lowRankFitting(params, points, basis);
+
+	gsInfo << "Method B:\n";
+	timesB.push_back(lowRankFitting.methodB());
+
+	for(size_t j=0; j<maxRanks.size(); j++)
+	{
+	    index_t maxRank = maxRanks[j];
+	    gsInfo << "Method C, rank " << maxRank << ":\n";
+	    timesC(i, j) = lowRankFitting.methodC(maxRank);
+	}
+    }
+
+    gsWriteGnuplot(numDOF, timesB, "example-6-method-B-fast.dat");
+
+    for(size_t j=0; j<maxRanks.size(); j++)
+    {
+	std::vector<real_t> timesCurr(numDOF.size());
+	for(size_t i=0; i<numDOF.size(); i++)
+	    timesCurr[i] = timesC(i, j);
+	gsWriteGnuplot(numDOF, timesCurr, "example-6-method-C-fast-iter-" + std::to_string(maxRanks[j]) + ".dat");
+    }
 }
 
 int main()
@@ -597,6 +765,8 @@ int main()
     //example_1();
     //example_2();
     //example_3();
-    example_4();
+    //example_4();
+    //example_5();
+    example_6();
     return 0;    
 }

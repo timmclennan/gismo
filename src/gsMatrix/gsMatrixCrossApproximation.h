@@ -103,7 +103,7 @@ protected:
 	}
     }
 
-    index_t findAbsMaxRow(index_t i) const
+    /*index_t findAbsMaxRow(index_t i) const
     {
 	index_t jk = 0;
 	T max = 0;
@@ -117,9 +117,16 @@ protected:
 	    }
 	}
 	return jk;
+	}*/
+
+    index_t findAbsMaxRow(index_t i) const
+    {
+	index_t* result = new index_t(0);
+	m_mat.row(i).maxCoeff(result);
+	return *result;
     }
 
-    index_t findAbsMaxCol(index_t j) const
+    /*index_t findAbsMaxCol(index_t j) const
     {
 	index_t ik = 0;
 	T max = 0;
@@ -133,6 +140,12 @@ protected:
 	    }
 	}
 	return ik;
+	}*/
+    index_t findAbsMaxCol(index_t j) const
+    {
+	index_t* result = new index_t(0);
+	m_mat.col(j).maxCoeff(result);
+	return *result;
     }
 
     /// Finds the element with the highest absolute value
