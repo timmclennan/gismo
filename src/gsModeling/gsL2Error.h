@@ -49,6 +49,21 @@ namespace gismo
 				);
 	case 7:
 	    return T(0);
+	case 8:
+	{
+	    if(v - u > 0.5)
+		return 1;
+	    else if(v - u > 0) // automatically also <= 0.5
+		return 2 * (v - u);
+	    else
+	    {
+		T arg = (u - 1.5) * (u - 1.5) + (v - 0.5) * (v - 0.5);
+		if(arg <= 1.0 / 16)
+		    return (math::cos(4 * EIGEN_PI * math::sqrt(arg)) + 1) / 2;
+		else
+		    return 0;
+	    }
+	}
 	default:
 	    gsWarn << "Unknown example " << example << "." << std::endl;
 	    return 0;

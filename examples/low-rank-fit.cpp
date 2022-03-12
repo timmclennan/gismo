@@ -702,10 +702,10 @@ void example_5()
 
 void example_6()
 {
-    index_t sample  = 4; // TODO: It would be good to have a function not from Irina & Clemens.
+    index_t sample  = 8; // TODO: It would be good to have a function not from Irina & Clemens.
     index_t deg = 3;
-    real_t tMin = -1;
-    real_t tMax = 1;
+    real_t tMin = 0;
+    real_t tMax = 2;
     index_t nExperiments = 7;
 
     gsMatrix<real_t> params, points;
@@ -719,6 +719,7 @@ void example_6()
     numDOF[5] = 512;
     numDOF[6] = 1024;
     sampleDataGre(1024, params, points, sample, tMin, tMax, deg);
+    //sampleData(1024, params, points,
 
     std::vector<index_t> maxRanks(4);
     maxRanks[0] = 5;
