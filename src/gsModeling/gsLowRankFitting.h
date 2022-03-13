@@ -392,6 +392,56 @@ T gsLowRankFitting<T>::methodB()
 template <class T>
 T gsLowRankFitting<T>::methodC(index_t maxIter)
 {
+    gsBSplineBasis<T> uBasis = *(static_cast<gsBSplineBasis<T>*>(&(this->m_basis->component(0))));
+    gsBSplineBasis<T> vBasis = *(static_cast<gsBSplineBasis<T>*>(&(this->m_basis->component(1))));
+
+    gsMatrix<T> uPar, vPar;
+    index_t uNum = partitionParam(uPar, vPar);
+
+    // Note that X and Y are transposed w.r.t the paper.
+    gsSparseMatrix<T> Xs, Ys;
+    uBasis.collocationMatrix(uPar, Xs);
+    vBasis.collocationMatrix(vPar, Ys);
+    gsMatrix<T> X(Xs.transpose());
+    gsMatrix<T> Y(Ys.transpose());
+
+    gsMatrix<T> Z = convertToMN(uNum);
+    gsMatrixCrossApproximation<T> crossApp(Z);
+    T sigma;
+    gsVector<T> uVec, vVec;
+    gsMatrix<T> uMat(uNum, maxIter), vMat(uNum, maxIter), tMat(maxIter, maxIter);
+    tMat.setZero();
+
+    gsStopwatch time;
+    time.restart();
+    gsMatrix<T> lhs1 = X * X.transpose();
+    typename Eigen::PartialPivLU<typename gsMatrix<T>::Base> eq1(lhs1);
+
+    gsMatrix<T> lhs2 = Y * Y.transpose();
+    typename Eigen::PartialPivLU<typename gsMatrix<T>::Base> eq2(lhs2);
+
+    for(index_t i=0; i<maxIter && crossApp.nextIteration(sigma, uVec, vVec, true); i++)
+    {
+	uMat.col(i) = uVec;
+	vMat.col(i) = vVec;
+	tMat(i, i)  = sigma;
+    }
+
+    gsMatrix<T> D = eq1.solve(X * uMat);
+    gsMatrix<T> E = eq2.solve(Y * vMat);
+    time.stop();
+
+    delete this->m_result;
+    this->m_result = this->m_basis->makeGeometry(give(convertBack(D * tMat * E.transpose()).transpose())).release();
+    this->computeErrors();
+    gsInfo << "method B: " << this->maxPointError() << std::endl;
+    gsWriteParaview(*this->m_result, "result");
+    return time.elapsed();
+}
+
+	/*template <class T>
+T gsLowRankFitting<T>::methodC(index_t maxIter)
+{
     gsMatrix<T> coefs(this->m_basis->component(0).size(),
 		      this->m_basis->component(1).size());
     coefs.setZero();
@@ -421,7 +471,7 @@ T gsLowRankFitting<T>::methodC(index_t maxIter)
     gsInfo << "method C: " << this->maxPointError() << std::endl;
     gsWriteParaview(*this->m_result, "result");
     return time.elapsed();
-}
+    }*/
 
 
 template <class T>

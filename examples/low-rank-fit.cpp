@@ -707,31 +707,33 @@ void example_6()
     real_t tMin = 0;
     real_t tMax = 2;
     index_t nExperiments = 7;
+    index_t nRanks = 5;
+    real_t delta = 3;
 
     gsMatrix<real_t> params, points;
 
     std::vector<index_t> numDOF(nExperiments);
-    numDOF[0] = 16;
-    numDOF[1] = 32;
-    numDOF[2] = 64;
-    numDOF[3] = 128;
-    numDOF[4] = 256;
-    numDOF[5] = 512;
-    numDOF[6] = 1024;
-    sampleDataGre(1024, params, points, sample, tMin, tMax, deg);
-    //sampleData(1024, params, points,
+    if(nExperiments > 0) numDOF[0] = 32;
+    if(nExperiments > 1) numDOF[1] = 64;
+    if(nExperiments > 2) numDOF[2] = 128;
+    if(nExperiments > 3) numDOF[3] = 256;
+    if(nExperiments > 4) numDOF[4] = 512;
+    if(nExperiments > 5) numDOF[5] = 1024;
+    if(nExperiments > 6) numDOF[6] = 2048;
 
-    std::vector<index_t> maxRanks(4);
-    maxRanks[0] = 5;
-    maxRanks[1] = 10;
-    maxRanks[2] = 15;
-    maxRanks[3] = 20;
+    std::vector<index_t> maxRanks(nRanks);
+    if(nRanks > 0) maxRanks[0] = 4;
+    if(nRanks > 1) maxRanks[1] = 8;
+    if(nRanks > 2) maxRanks[2] = 16;
+    if(nRanks > 3) maxRanks[3] = 32;
+    if(nRanks > 4) maxRanks[4] = 64;
 
     std::vector<real_t> timesB;
     gsMatrix<real_t> timesC(numDOF.size(), maxRanks.size());
     gsStopwatch time;
     for(size_t i=0; i<numDOF.size(); i++)
     {
+	sampleDataGre(delta * numDOF[i], params, points, sample, tMin, tMax, deg);
 	index_t numKnots = numDOF[i] - deg - 1;
 
 	gsKnotVector<real_t> knots(tMin, tMax, numKnots, deg+1);
