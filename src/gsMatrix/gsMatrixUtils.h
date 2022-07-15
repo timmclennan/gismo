@@ -37,9 +37,16 @@ namespace gismo
 	    GISMO_ASSERT(u.size() == result.rows(), "row mismatch in addTensorProduct");
 	    GISMO_ASSERT(v.size() == result.cols(), "col mismatch in addTensorProduct");
 
-	    for(index_t i=0; i<result.rows(); i++)
-		for(index_t j=0; j<result.cols(); j++)
-		    result(i, j) += sigma * u(i) * v(j);
+	    // for(index_t i=0; i<result.rows(); i++)
+	    // 	for(index_t j=0; j<result.cols(); j++)
+	    // 	    result(i, j) += sigma * u(i) * v(j);
+
+	    // The following seems to be quite a bit faster than my for-loops.
+	    result += sigma * u * v.transpose();
+	    //result = result + sigma * u * v.transpose();
+
+	    // for(index_t i=0; i<result.rows(); i++)
+	    // 	result.row(i) += sigma * u(i) * v;
 	}
 
 	template <class T>
@@ -71,6 +78,48 @@ namespace gismo
 	    for(index_t i=0; i<size; i++)
 		result(i, i) = T(1);
 	    return result;
+	}
+	
+	template <class T>
+	T maxNorm(const gsMatrix<T>& mat)
+	{
+	    T res = 0;
+
+	    for(index_t i=0; i<mat.rows(); i++)
+		for(index_t j=0; j<mat.cols(); j++)
+		    res = std::max(res, math::abs(mat(i, j)));
+
+	    return res;
+	}
+
+
+	/// Appends \a vec as a new col to \a mat.
+	template <class T>
+	void appendCol(gsMatrix<T>& mat, const gsVector<T> vec)
+	{
+	    if(mat.rows() != vec.size())
+		gsWarn << "wrong sizes " << mat.rows() << " != " << vec.size() << std::endl;
+
+	    index_t oldCols = mat.cols();
+	    mat.conservativeResize(Eigen::NoChange, oldCols + 1);
+	    mat.col(oldCols) = vec;
+	}
+
+	template <class T>
+	void appendDiag(gsMatrix<T>& mat, T num)
+	{
+	    index_t oldRows = mat.rows();
+	    index_t oldCols = mat.cols();
+	    index_t newDiag = std::min(oldRows, oldCols);
+
+	    mat.conservativeResize(oldRows + 1, oldCols + 1);
+	    for(index_t i=0; i<mat.rows(); i++)
+		mat(i, oldCols) = 0;
+
+	    for(index_t j=0; j<mat.cols(); j++)
+		mat(oldRows, j) = 0;
+
+	    mat(newDiag, newDiag) = num;
 	}
 
     } // namespace matrixUtils

@@ -55,13 +55,21 @@ public:
 	m_mat = matrix;
     }
 
+    void getRest(gsMatrix<T>& result) const
+    {
+	result = m_mat;
+    }
+
 protected:
 
     bool nextFullIteration(T& sigma, gsVector<T>& uVec, gsVector<T>& vVec)
     {
 	index_t i=0, j=0;
 	if( !findAbsMax(i, j))
+	{
+	    gsInfo << "Not found" << std::endl;
 	    return false;
+	}
 
 	// Note to future self: the order in the tensor-product is
 	// somewhat surprising, u is a column and v a row.
@@ -117,16 +125,30 @@ protected:
 	    }
 	}
 	return jk;
-	}*/
+    }*/
 
     index_t findAbsMaxRow(index_t i) const
+    {
+	index_t minIndex, maxIndex;
+	gsVector<T> row = m_mat.row(i);
+	row.minCoeff(&minIndex);
+	row.maxCoeff(&maxIndex);
+	if(math::abs(row(minIndex)) > math::abs(row(maxIndex)))
+	    return minIndex;
+	else
+	    return maxIndex;
+    }	
+
+
+    // This does not take the absolute value into account.
+    /*index_t findAbsMaxRow(index_t i) const
     {
 	index_t* result = new index_t(0);
 	m_mat.row(i).maxCoeff(result);
 	return *result;
-    }
+	}*/
 
-    /*index_t findAbsMaxCol(index_t j) const
+    index_t findAbsMaxCol(index_t j) const
     {
 	index_t ik = 0;
 	T max = 0;
@@ -140,13 +162,14 @@ protected:
 	    }
 	}
 	return ik;
-	}*/
-    index_t findAbsMaxCol(index_t j) const
+    }
+
+    /*index_t findAbsMaxCol(index_t j) const
     {
 	index_t* result = new index_t(0);
 	m_mat.col(j).maxCoeff(result);
 	return *result;
-    }
+	}*/
 
     /// Finds the element with the highest absolute value
     /// and returns false iff the max is equal to 0.
@@ -160,6 +183,7 @@ protected:
 	    for(index_t j=0; j<m_mat.cols(); j++)
 	    {
 		T curr = math::abs(m_mat(i,j));
+		//gsInfo << "curr: " << curr << ", ";
 		if(curr > max)
 		{
 		    max = curr;

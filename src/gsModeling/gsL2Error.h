@@ -15,6 +15,8 @@
 #pragma once
 
 #include <gsAssembler/gsQuadRule.h>
+#include <gsAssembler/gsQuadrature.h>
+#include <gsIO/gsOptionList.h>
 
 namespace gismo
 {
@@ -53,7 +55,7 @@ namespace gismo
 	{
 	    if(v - u > 0.5)
 		return 1;
-	    else if(v - u > 0) // automatically also <= 0.5
+	    else if(v - u >= 0) // automatically also <= 0.5
 		return 2 * (v - u);
 	    else
 	    {

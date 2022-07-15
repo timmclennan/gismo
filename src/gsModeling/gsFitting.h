@@ -16,6 +16,7 @@
 
 #include <gsCore/gsForwardDeclarations.h>
 #include <vector>
+#include <gsCore/gsMath.h>
 
 namespace gismo
 {
@@ -126,6 +127,14 @@ public:
     /// \param coefs prescribed coefficients.
     void setConstraints(const std::vector<index_t>& indices,
 			const std::vector<gsMatrix<T> >& coefs);
+
+    T get_l2Error() const
+    {
+	T res = 0;
+	for(auto it=m_pointErrors.begin(); it!=m_pointErrors.end(); ++it)
+	    res += *it * *it;
+	return math::sqrt(res);
+    }
 
 private:
     /// Extends the system of equations by taking constraints into account.

@@ -2,6 +2,7 @@
 #include <gsModeling/gsLowRankFitting.h>
 #include <gsModeling/gsL2Error.h>
 #include <gsIO/gsWriteGnuplot.h>
+#include <gsMatrix/gsMatrixCrossApproximation_3.h>
 
 #include <random>
 
@@ -60,6 +61,58 @@ gsMatrix<real_t> testMatrix(index_t example = 0)
 
 	return coefs;
     }
+    else if(example == 3)
+    {
+	gsMatrix<real_t> coefs(4, 4);
+	coefs.setZero();
+
+	coefs(0, 1) = 1;
+	coefs(0, 2) = 1;
+	coefs(0, 3) = 1;
+
+	coefs(1, 2) = 1;
+	coefs(1, 3) = 1;
+
+	coefs(2, 3) = 1;
+
+	return coefs;
+    }
+    else if(example == 4)
+    {
+	gsMatrix<real_t> coefs(5, 5);
+	coefs.setZero();
+
+	coefs(0, 1) = 0.666667;
+	coefs(0, 2) = 1;
+	coefs(0, 3) = 1;
+	coefs(0, 4) = 1;
+
+	coefs(1, 2) = 1;
+	coefs(1, 3) = 1;
+	coefs(1, 4) = 1;
+
+	coefs(2, 3) = 1;
+	coefs(2, 4) = 1;
+
+	coefs(3, 4) = 0.666667;
+
+	return coefs;
+    }
+    else if(example == 5)
+    {
+	gsMatrix<real_t> coefs(4, 4);
+	coefs.setZero();
+	coefs(0, 0) = -2;
+	coefs(0, 1) = -3;
+	coefs(1, 0) = 1;
+	coefs(1, 1) = -3;
+	coefs(1, 2) = -4;
+	coefs(2, 2) = -1;
+	coefs(2, 3) = 1;
+	coefs(3, 3) = -1;
+
+	return coefs;
+    }
     else
     {
 	index_t numU = 5;
@@ -97,10 +150,19 @@ void checkCrossApp(index_t example, bool pivot)
 
     real_t sigma;
     gsVector<real_t> uVec, vVec;
-    for(index_t i=0; i<coefs.rows(); i++)
-    {
-	crossApp.nextIteration(sigma, uVec, vVec, pivot);
+    // for(index_t i=0; i<coefs.rows(); i++)
+    // {
+    // 	crossApp.nextIteration(sigma, uVec, vVec, pivot);
 
+    // 	matrixUtils::addTensorProduct(check, sigma, uVec, vVec);
+    // 	gsInfo << "Iteration " << i << ":\n" 
+    // 	       << "check:\n" << check << std::endl;
+    // }
+
+    index_t i=0;
+    while(crossApp.nextIteration(sigma, uVec, vVec, pivot))
+    {
+	i++;
 	matrixUtils::addTensorProduct(check, sigma, uVec, vVec);
 	gsInfo << "Iteration " << i << ":\n" 
 	       << "check:\n" << check << std::endl;
@@ -121,7 +183,7 @@ void checkCrossAppMat(index_t example, bool pivot)
 
     gsInfo << "Target:\n" << coefs << std::endl;
 
-    gsMatrixCrossApproximation<real_t> crossApp(coefs);
+    gsMatrixCrossApproximation_3<real_t> crossApp(coefs);
 
     real_t sigma;
     gsVector<real_t> uVec, vVec;
@@ -334,16 +396,12 @@ real_t stdFit(const gsMatrix<real_t>& params,
     gsFitting<real_t> fitting(params, points, basis);
     fitting.compute();
     fitting.computeErrors();
-    gsInfo << "Max err of standard fitting: " << fitting.maxPointError() << std::endl;
-    //gsInfo << "L2  err of standard fitting: " << fitting.L2Error() << std::endl;
     real_t L2Err = L2Error(*static_cast<gsTensorBSpline<2, real_t>*>(fitting.result()), sample);
-    gsInfo << "L2 error of standard fitting: "
-	   << L2Err
+    gsInfo << "max err std: " << fitting.maxPointError() << ",\n"
+	   << "L2 err std: "  << L2Err << ",\n"
+	   << "l2 err std: "  << fitting.get_l2Error()
 	   << std::endl;
-    //gsWriteParaview(*fitting.result(), "fitting", 10000, false, true);
-    // gsFileData<real_t> fd;
-    // fd << *fitting.result();
-    // fd.dump("fitting");
+    gsWriteParaview(*fitting.result(), "fitting", 10000, false, true);
     return L2Err;
 }
 
@@ -495,10 +553,6 @@ void development()
     lowCrossAppFit(params, points, numKnots, deg, sample, maxIter, filename, false, minT);
     lowCrossAppFit(params, points, numKnots, deg, sample, maxIter, filename, true,  minT);
     //lowCrossResFit(params, points, numKnots, deg);
-    //checkCrossApp(false);
-    //checkCrossApp(3, true);
-    //checkCrossAppMat(true);
-
     //param();
 }
 
@@ -702,13 +756,14 @@ void example_5()
 
 void example_6()
 {
-    index_t sample  = 8; // TODO: It would be good to have a function not from Irina & Clemens.
+    index_t sample  = 6; // 8 used to be here.
     index_t deg = 3;
     real_t tMin = 0;
     real_t tMax = 2;
-    index_t nExperiments = 7;
+    index_t nExperiments = 6;
     index_t nRanks = 5;
     real_t delta = 3;
+    bool printErr = false;
 
     gsMatrix<real_t> params, points;
 
@@ -741,13 +796,13 @@ void example_6()
 	gsLowRankFitting<real_t> lowRankFitting(params, points, basis);
 
 	gsInfo << "Method B:\n";
-	timesB.push_back(lowRankFitting.methodB());
+	timesB.push_back(lowRankFitting.methodB(printErr));
 
 	for(size_t j=0; j<maxRanks.size(); j++)
 	{
 	    index_t maxRank = maxRanks[j];
 	    gsInfo << "Method C, rank " << maxRank << ":\n";
-	    timesC(i, j) = lowRankFitting.methodC(maxRank);
+	    timesC(i, j) = lowRankFitting.methodC(printErr, maxRank);
 	}
     }
 
@@ -762,14 +817,176 @@ void example_6()
     }
 }
 
+void example_7()
+{
+    index_t sample = 6; // Works well for 4 and 6 but not that well for 8.
+    index_t deg = 3;
+    real_t tMin = 0;
+    real_t tMax = 2;
+
+    gsMatrix<real_t> params, points;
+
+    index_t numDOF = 32;
+
+    std::vector<real_t> stdL2Err;
+    index_t numKnots = numDOF - deg - 1;
+    sampleData(512, params, points, sample, tMin, tMax);
+
+    gsInfo << "params: " << params.rows() << " x " << params.cols() << std::endl;
+
+    gsKnotVector<real_t> knots(tMin, tMax, numKnots, deg+1);
+    gsTensorBSplineBasis<2, real_t> basis(knots, knots);
+
+    gsInfo << "basis:\n" << basis << std::endl;
+    gsLowRankFitting<real_t> lowRankFitting(params, points, basis);
+    //lowRankFitting.computeCrossWithRef(false, 200, sample);
+    lowRankFitting.computeCross_3(true, 200, sample);
+    //gsWriteParaview(*lowRankFitting.result(), "cross-result", 10000, false, true);
+    lowRankFitting.exportL2Err("example-7.dat");
+
+    // stdFit(params, points,     numKnots,     deg, sample, tMin, tMax);
+    // stdFit(params, points, 2 * numKnots + 1, deg, sample, tMin, tMax);
+    // stdFit(params, points, 4 * numKnots + 3, deg, sample, tMin, tMax);
+    // stdFit(params, points, 8 * numKnots + 7, deg, sample, tMin, tMax);
+    // stdFit(params, points, 16 * numKnots + 15, deg, sample, tMin, tMax);
+}
+
+// for profiling_3
+gsMatrix<real_t> convertToMN(const gsMatrix<real_t>& points, index_t rows)
+{
+    // gsMatrix<real_t> result(rows, points.cols() / rows);
+    // for(index_t i=0; i<points.cols(); i++)
+    // {
+    // 	//gsInfo << "result(" << i%rows << ", " << i/rows << ") = " <<  points(0, i) << std::endl;
+    // 	result(i/rows, i%rows) = points(0, i);
+    // }
+
+    gsMatrix<real_t> result(rows, points.rows() / rows);
+    for(index_t i=0; i<points.rows(); i++)
+	result(i%rows, i/rows) = points(i, 0);
+
+    return result;
+}
+
+void profiling_1()
+{
+    gsMatrix<real_t> params, points;
+    sampleData(128, params, points, 8, 0.0, 1.0);
+
+    index_t uNum = math::sqrt(params.cols());
+    index_t maxIter = 64;
+    gsMatrix<real_t> ptsMN = convertToMN(points.transpose(), uNum);
+    gsMatrixCrossApproximation<real_t> crossApp(ptsMN.transpose());
+    gsMatrix<real_t> uMat(uNum, maxIter), vMat(uNum, maxIter), tMat(maxIter, maxIter);
+    gsVector<real_t> uVec, vVec;
+    real_t sigma;
+    tMat.setZero();
+    for(index_t i=0; i<maxIter && crossApp.nextIteration(sigma, uVec, vVec, true); i++)
+    {
+	//gsInfo << "i: " << i << " / " << maxIter << std::endl;
+	uMat.col(i) = uVec;
+	vMat.col(i) = vVec;
+	tMat(i, i)  = sigma;
+    }    
+}
+
+void profiling_3()
+{
+    gsMatrix<real_t> params, points;
+    sampleData(2048, params, points, 6, 0.0, 1.0);
+    gsMatrix<real_t> ptsMN = convertToMN(params, math::sqrt(params.cols()));
+    gsMatrixCrossApproximation_3<real_t> crossApp(ptsMN, 0);
+    crossApp.compute(true, 64);
+    gsMatrix<real_t> uMat, vMat, tMat;
+    crossApp.getU(uMat);
+    crossApp.getV(vMat);
+    crossApp.getT(tMat);
+}
+
+void profiling_4()
+{
+    gsMatrix<real_t> params, points;
+    sampleData(12, params, points, 8, 0.0, 1.0);
+    gsInfo << points << std::endl;
+    gsInfo << "==========================================" << std::endl;
+    gsKnotVector<real_t> knots(0.0, 1.0, 13, 4);
+    gsTensorBSplineBasis<2, real_t> basis(knots, knots);
+    gsLowRankFitting<real_t> fitting(params, points, basis);
+    gsInfo << fitting.returnPoints() << std::endl;
+    fitting.testMN(12);
+}
+
+// Bert's stopping criterium.
+void example_8()
+{
+    index_t sample = 5;
+    index_t deg = 3;
+    real_t tMin = 0;
+    real_t tMax = 2;
+
+    gsMatrix<real_t> params, points;
+
+    index_t numDOF = 4;
+
+    std::vector<real_t> stdL2Err;
+    index_t numKnots = numDOF - deg - 1;
+    sampleDataGre(259, params, points, sample, tMin, tMax);
+    gsKnotVector<real_t> knots(tMin, tMax, numKnots, deg+1);
+    gsTensorBSplineBasis<2, real_t> basis(knots, knots);
+    gsLowRankFitting<real_t> lowRankFitting(params, points, basis);
+    lowRankFitting.computeCrossWithRefAndStop(1e-12, true);
+    //lowRankFitting.computeCross(false, 200, 6);
+
+    stdFit(params, points, 0, deg, sample, tMin, tMax);
+    stdFit(params, points, 1, deg, sample, tMin, tMax);
+    stdFit(params, points, 3, deg, sample, tMin, tMax);
+    stdFit(params, points, 7, deg, sample, tMin, tMax);
+    stdFit(params, points, 15, deg, sample, tMin, tMax);
+    stdFit(params, points, 31, deg, sample, tMin, tMax);
+    stdFit(params, points, 63, deg, sample, tMin, tMax);
+    stdFit(params, points, 127, deg, sample, tMin, tMax);
+    stdFit(params, points, 255, deg, sample, tMin, tMax);
+    //stdFit(params, points, 511, deg, sample, tMin, tMax);
+}
+
+// Fitting with general weights.
+void example_9()
+{
+}
+
+void debugging()
+{
+    gsMatrix<real_t> mat(0, 0);
+    // mat << 1, 0, 0,
+    // 	0, 1, 0,
+    // 	0, 0, 1;
+
+    // gsVector<real_t> vec(3);
+    // vec << 1, 2, 3;
+    //matrixUtils::appendCol(mat, vec);
+    matrixUtils::appendDiag<real_t>(mat, 1);
+    matrixUtils::appendDiag<real_t>(mat, 2);
+    matrixUtils::appendDiag<real_t>(mat, 3);
+    gsInfo << mat << std::endl;
+}
+
 int main()
 {
     //development();
+    //debugging();
+
     //example_1();
     //example_2();
     //example_3();
     //example_4();
     //example_5();
-    example_6();
+    //example_6();
+    //example_7();
+    example_8();
+
+    //checkCrossApp(5, false);
+    //profiling_1();
+    //profiling_3();
+    //profiling_4();
     return 0;    
 }
