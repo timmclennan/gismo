@@ -401,6 +401,52 @@ void gsLowRankFitting<T>::computeRes()
 }
 
 template <class T>
+void gsLowRankFitting<T>::computeFull(const gsVector<T>& uWeights, const gsVector<T>& vWeights)
+{
+    gsBSplineBasis<T> uBasis = *(static_cast<gsBSplineBasis<T>*>(&(this->m_basis->component(0))));
+    gsBSplineBasis<T> vBasis = *(static_cast<gsBSplineBasis<T>*>(&(this->m_basis->component(1))));
+
+    gsMatrix<T> uPar, vPar;
+    index_t uNum = partitionParam(uPar, vPar);
+
+    // Note that X and Y here are the same way as in the paper, unlike the older implementation.
+    gsSparseMatrix<T> Xs, Ys;
+    uBasis.collocationMatrix(uPar, Xs);
+    vBasis.collocationMatrix(vPar, Ys);
+    gsSparseMatrix<T> uWs = matrixUtils::sparseDiag(uWeights);
+    gsSparseMatrix<T> vWs = matrixUtils::sparseDiag(vWeights);
+
+    gsSparseMatrix<T> Z = convertToSparseMN(uNum);
+    gsSparseMatrix<T> lhs1 = Xs.transpose() * uWs * Xs;
+    lhs1.makeCompressed();
+    gsSparseMatrix<T> lhs2 = Ys.transpose() * vWs * Ys;
+    lhs2.makeCompressed();
+
+    // Saving the matrices beforehand leads to a speed up of an order of magnitude.
+    gsMatrix<T> rhs1 = Xs.transpose() * uWs * Z;
+    typename Eigen::SparseLU<typename gsSparseMatrix<T>::Base> solver1;
+    solver1.analyzePattern(lhs1);
+    solver1.factorize(lhs1);
+
+    gsMatrix<T> D = solver1.solve(rhs1);
+    typename Eigen::SparseLU<typename gsSparseMatrix<T>::Base> solver2;
+    solver2.analyzePattern(lhs2);
+    solver2.factorize(lhs2);
+
+    gsMatrix<T> rhs2 = Ys.transpose() * (D.transpose());
+    gsMatrix<T> CT = solver2.solve(rhs2);
+
+    //if(printErr)
+    //{
+	delete this->m_result;
+	this->m_result = this->m_basis->makeGeometry(give(convertBack(CT.transpose()).transpose())).release();
+	this->computeErrors();
+	gsInfo << "compute full, max err: " << this->maxPointError() << std::endl;
+	gsWriteParaview(*this->m_result, "result");
+	//}
+}
+
+template <class T>
 T gsLowRankFitting<T>::methodB(bool printErr)
 {
     gsBSplineBasis<T> uBasis = *(static_cast<gsBSplineBasis<T>*>(&(this->m_basis->component(0))));
@@ -463,54 +509,6 @@ T gsLowRankFitting<T>::methodB(bool printErr)
     }
     return time.elapsed();
 }
-
-/*template <class T>
-T gsLowRankFitting<T>::methodC(bool printErr, index_t maxIter)
-{
-    gsBSplineBasis<T> uBasis = *(static_cast<gsBSplineBasis<T>*>(&(this->m_basis->component(0))));
-    gsBSplineBasis<T> vBasis = *(static_cast<gsBSplineBasis<T>*>(&(this->m_basis->component(1))));
-
-    gsMatrix<T> uPar, vPar;
-    index_t uNum = partitionParam(uPar, vPar);
-
-    // Note that X and Y are transposed w.r.t the paper.
-    gsSparseMatrix<T> Xs, Ys;
-    uBasis.collocationMatrix(uPar, Xs);
-    vBasis.collocationMatrix(vPar, Ys);
-    gsMatrix<T> X(Xs.transpose());
-    gsMatrix<T> Y(Ys.transpose());
-
-    gsMatrix<T> Z = convertToMN(uNum);
-    gsMatrixCrossApproximation_3<T> crossApp(Z, 0);
-
-    gsMatrix<T> lhs1 = X * X.transpose();
-    gsMatrix<T> lhs2 = Y * Y.transpose();
-
-    gsStopwatch time;
-    time.restart();
-    typename Eigen::PartialPivLU<typename gsMatrix<T>::Base> eq1(lhs1);
-    typename Eigen::PartialPivLU<typename gsMatrix<T>::Base> eq2(lhs2);
-
-    crossApp.compute(true, maxIter);
-    gsMatrix<T> uMat, vMat, tMat;
-    crossApp.getU(uMat);
-    crossApp.getV(vMat);
-    crossApp.getT(tMat);
-
-    gsMatrix<T> D = eq1.solve(X * uMat);
-    gsMatrix<T> E = eq2.solve(Y * vMat);
-    time.stop();
-
-    if(printErr)
-    {
-	delete this->m_result;
-	this->m_result = this->m_basis->makeGeometry(give(convertBack(D * tMat * E.transpose()).transpose())).release();
-	this->computeErrors();
-	gsInfo << "method C: " << this->maxPointError() << std::endl;
-	gsWriteParaview(*this->m_result, "result");
-    }
-    return time.elapsed();
-    }*/
 
 template <class T>
 T gsLowRankFitting<T>::methodC(bool printErr, index_t maxIter)

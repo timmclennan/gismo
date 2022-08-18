@@ -71,6 +71,26 @@ namespace gismo
 	}
 
 	template <class T>
+	gsSparseMatrix<T> sparseDiag(const gsVector<T>& vec)
+	{
+	    index_t size = vec.size();
+	    gsSparseMatrix<T> result(size, size);
+	    for(index_t i=0; i<size; i++)
+		result(i, i) = vec(i);
+	    return result;   
+	}
+
+	/// Vector of size \a size with each element equal to 1.
+	template <class T>
+	gsVector<T> oneVector(index_t size)
+	{
+	    gsVector<T> result(size);
+	    for(index_t i=0; i<size; i++)
+		result(i) = T(1);
+	    return result;
+	}
+
+	template <class T>
 	gsMatrix<T> identity(index_t size)
 	{
 	    gsMatrix<T> result(size, size);
@@ -91,7 +111,6 @@ namespace gismo
 
 	    return res;
 	}
-
 
 	/// Appends \a vec as a new col to \a mat.
 	template <class T>

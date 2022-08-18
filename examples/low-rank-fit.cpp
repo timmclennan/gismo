@@ -202,6 +202,27 @@ void checkCrossAppMat(index_t example, bool pivot)
 }
 
 template <class T>
+T l2Error(const gsGeometry<T>* result,
+	  const gsMatrix<T>& params,
+	  const gsMatrix<T>& points)
+{
+    std::vector<T> errors;
+    gsMatrix<T> results;
+    result->eval_into(params, results);
+
+    T err = 0;
+    for(index_t row = 0; row != points.rows(); row++)
+    {
+	for(index_t col = 0; col != points.cols(); col++)
+	{
+	    err += math::pow(points(row, col) - results(row, col), 2);
+	}
+    }
+
+    return sqrt(err);
+}
+
+template <class T>
 void sampleData(const gsVector<T>& uPar, const gsVector<T>& vPar,
 		gsMatrix<T>& params, gsMatrix<T>& points, index_t sample)
 {
@@ -382,6 +403,69 @@ void sampleDataGauss(const gsTensorBSplineBasis<2, T>& basis,
     sampleData(uParams, vParams, params, points, sample);
 }
 
+template <class T>
+void sampleDataMeshInterpolated(gsMatrix<T>& params,
+				gsMatrix<T>& points,
+				const std::string& meshFile,
+				index_t uNum,
+				index_t vNum,
+				index_t sample)
+{
+    gsFileData<> fd(meshFile);
+    gsMesh<real_t>::uPtr mm = fd.getFirst<gsMesh<real_t>>();
+
+    params.resize(2, uNum * vNum);
+    points.resize(1, uNum * vNum);
+
+    for(index_t i=0; i<uNum; i++)
+    {
+	for(index_t j=0; j<vNum; j++)
+	{
+	    index_t glob = j * vNum + i;
+	    real_t u = real_t(i+1) / (uNum + 1);
+	    real_t v = real_t(j+1) / (vNum + 1);
+
+	    params(0, glob) = u;
+	    params(1, glob) = v;
+
+	    gsVertex<real_t> vert(u, v, 0);
+	    const auto faces = mm->faces();
+	    for(auto fi=faces.begin(); fi != faces.end(); ++fi)
+	    {
+		if((*fi)->inside(&vert))
+		{
+		    points(0, glob) = evalSample(u, v, sample);
+		}
+	    }
+	}
+    }
+}
+
+template <class T>
+void sampleDataMeshVertices(gsMatrix<T>& params,
+			    gsMatrix<T>& points,
+			    const std::string& meshFile,
+			    index_t sample)
+{
+    gsFileData<> fd(meshFile);
+    gsMesh<real_t>::uPtr mm = fd.getFirst<gsMesh<real_t>>();
+
+    const auto vertices = mm->vertices();
+    params.resize(2, vertices.size());
+    points.resize(1, vertices.size());
+
+    index_t glob = 0;
+    for(auto vi = vertices.begin(); vi != vertices.end(); vi++, glob++)
+    {
+	real_t u = (*vi)->x();
+	real_t v = (*vi)->y();
+
+	params(0, glob) = u;
+	params(1, glob) = v;
+	points(0, glob) = evalSample(u, v, sample);
+    }
+}
+
 real_t stdFit(const gsMatrix<real_t>& params,
 	      const gsMatrix<real_t>& points,
 	      index_t numKnots,
@@ -396,13 +480,16 @@ real_t stdFit(const gsMatrix<real_t>& params,
     gsFitting<real_t> fitting(params, points, basis);
     fitting.compute();
     fitting.computeErrors();
-    real_t L2Err = L2Error(*static_cast<gsTensorBSpline<2, real_t>*>(fitting.result()), sample);
-    gsInfo << "max err std: " << fitting.maxPointError() << ",\n"
-	   << "L2 err std: "  << L2Err << ",\n"
-	   << "l2 err std: "  << fitting.get_l2Error()
-	   << std::endl;
+    //real_t L2Err = L2Error(*static_cast<gsTensorBSpline<2, real_t>*>(fitting.result()), sample);
+    // gsInfo << "max err std: " << fitting.maxPointError() << ",\n"
+    // 	   << "L2 err std: "  << L2Err << ",\n"
+    // 	   << "l2 err std: "  << fitting.get_l2Error()
+    // 	   << std::endl;
     gsWriteParaview(*fitting.result(), "fitting", 10000, false, true);
-    return L2Err;
+    // gsInfo << "just checking:\n";
+    // printErrors(fitting.result(), params, points);
+    //return L2Err;
+    return fitting.get_l2Error();
 }
 
 void lowSVDFit(const gsMatrix<real_t>& params,
@@ -952,6 +1039,97 @@ void example_8()
 // Fitting with general weights.
 void example_9()
 {
+    index_t sample = 5;
+    index_t deg = 3;
+    real_t tMin = 0;
+    real_t tMax = 2;
+    index_t nSamples = 259;
+
+    gsMatrix<real_t> params, points;
+
+    index_t numDOF = 4;
+
+    std::vector<real_t> stdL2Err;
+    index_t numKnots = numDOF - deg - 1;
+    sampleDataGre(nSamples, params, points, sample, tMin, tMax);
+    gsKnotVector<real_t> knots(tMin, tMax, numKnots, deg+1);
+    gsTensorBSplineBasis<2, real_t> basis(knots, knots);
+    gsLowRankFitting<real_t> lowRankFitting(params, points, basis);
+    lowRankFitting.computeFull();
+
+    // work in progress
+    gsVector<real_t> weights = matrixUtils::oneVector<real_t>(nSamples * nSamples);
+    lowRankFitting.setWeights(weights);
+    gsInfo << "weighted l2-error: " << lowRankFitting.get_weightedl2Error() << std::endl;
+
+    stdFit(params, points, 0, deg, sample, tMin, tMax);
+}
+
+// Fitting unstructured data by sampling a mesh.
+void example_10()
+{
+    //gsFileData<> fd("nefertiti-parameterized.off");
+    // gsMesh<real_t>::uPtr mm = fd.getFirst<gsMesh<real_t>>();
+
+    // const auto vertices = mm->vertices();
+    // for(auto vi=vertices.begin(); vi!=vertices.end(); ++vi)
+    // {
+    // 	real_t u = (*vi)->x();
+    // 	real_t v = (*vi)->y();
+    // 	//real_t disp = 0.25 * math::sin(2 * EIGEN_PI * x) * math::sin(2 * EIGEN_PI * y);
+    // 	//real_t disp = 0.25 * math::exp(math::sqrt(u * u + v * v));
+    // 	real_t arg = 5 * EIGEN_PI * ((u - 0.2) * (u - 0.2) + (v - 0.0) * (v - 0.0));
+    //     real_t disp =  math::sin(arg) / arg;
+
+    // 	(*vi)->move(0, 0, disp);
+    // }
+    //gsWriteParaview(*mm, "waves");
+
+    index_t uNum = 64;
+    index_t vNum = 64;
+    index_t sample = 4;
+    std::string filename = "nefertiti-parameterized.off";
+    gsMatrix<real_t> vertParams, vertPoints, gridParams, gridPoints;
+
+    index_t deg = 3;
+    real_t tMin = 0;
+    real_t tMax = 1;
+    
+    sampleDataMeshInterpolated(gridParams, gridPoints, filename, uNum, vNum, sample);
+    sampleDataMeshVertices(vertParams, vertPoints, filename, sample);
+
+    index_t maxGridIter = 16;
+    std::vector<real_t> totDOF(maxGridIter);
+    std::vector<real_t> stdErrs, tensErrs;
+    // Warning: taking 0 DOF leads to a memory overflow.
+    for(index_t i=1; i<=maxGridIter; i++)
+    {
+	index_t numDOF = 4 * i;
+	index_t numKnots = numDOF - deg - 1;
+	totDOF[i] = numDOF * numDOF;
+
+	gsKnotVector<real_t> knots(tMin, tMax, numKnots, deg+1);
+	gsTensorBSplineBasis<2, real_t> basis(knots, knots);
+	gsLowRankFitting<real_t> lowRankFitting(gridParams, gridPoints, basis);
+	lowRankFitting.computeFull();
+
+	real_t tensErr = l2Error(lowRankFitting.result(), vertParams, vertPoints);
+	gsInfo << "tensor-product l2-error in vertices: " << tensErr << std::endl;
+	tensErrs.push_back(tensErr);
+    }
+
+    index_t maxVertIter = 5;
+    for(index_t i=1; i<maxVertIter; i++)
+    {
+	index_t numDOF = 4 * i;
+	index_t numKnots = numDOF - deg - 1;
+
+	real_t stdErr = stdFit(vertParams, vertPoints, numKnots, deg, sample, tMin, tMax);
+	gsInfo << "full fitting   l2-error in vertices: " << stdErr << std::endl;
+	stdErrs.push_back(stdErr);
+    }
+    gsWriteGnuplot(totDOF, stdErrs, "example-10-std.dat");
+    gsWriteGnuplot(totDOF, tensErrs, "example-10-tens.dat");
 }
 
 void debugging()
@@ -970,6 +1148,14 @@ void debugging()
     gsInfo << mat << std::endl;
 }
 
+/// Algo converges to the full approximation when
+/// $\varepsilon_{\text{abort}}=\infty$ and
+/// $\varepsilon_{\text{accept}}=0.$
+void example_11()
+{
+    // TODO.
+}
+
 int main()
 {
     //development();
@@ -982,7 +1168,9 @@ int main()
     //example_5();
     //example_6();
     //example_7();
-    example_8();
+    //example_8();
+    //example_9();
+    example_10();
 
     //checkCrossApp(5, false);
     //profiling_1();

@@ -146,6 +146,33 @@ public:
          return result;
         }
 
+    gsVector3d<T> baryCoords(gsVertexHandle v)
+    {
+	GISMO_ASSERT(v->z() == 0, "baryCoords implemented only for z == 0");
+
+	gsMatrix<T, 3, 3> matrix;
+	for(size_t vi=0; vi<3; vi++)
+	{
+	    matrix(0, vi) = vertices[vi]->x();
+	    matrix(1, vi) = vertices[vi]->y();
+	    //matrix.topRows(2).col(vi) = *vertices[vi];
+	}
+	matrix.row(2).setOnes();
+
+	gsVector3d<T> vector;
+	vector << v->x(), v->y(), 1;
+
+	return matrix.partialPivLu().solve(vector);
+    }
+
+    bool inside(gsVertexHandle v)
+    {
+	auto bary = baryCoords(v);
+	return (bary[0] >= 0 && bary[0] <=1 &&
+		bary[1] >= 0 && bary[1] <=1 &&
+		bary[2] >= 0 && bary[2] <=1);
+    }
+
 public:
 
     //List of vetrices on this face

@@ -73,6 +73,17 @@ public:
 
     void computeRes();
 
+    // Method B with weights.
+    void computeFull(const gsVector<T>& uWeights, const gsVector<T>& vWeights);
+
+    // Method B with more details.
+    void computeFull()
+    {
+	index_t uNpts = math::sqrt(this->m_param_values.cols());
+	gsVector<T> identity = matrixUtils::oneVector<T>(uNpts);
+	computeFull(identity, identity);
+    }
+
     void computeCrossWithRef(bool pivot, index_t maxIter, index_t sample);
 
     void computeCrossWithRefAndStop(T tol, bool pivot);
@@ -136,8 +147,6 @@ protected:
     void initPQ(const gsMatrix<T>& uWeights, const gsMatrix<T>& vWeights);
 
 protected:
-
-    gsMatrix<T> m_uWeights, m_vWeights; // TODO: remove!
 
     gsMatrix<T> m_X, m_Y; // Transposed(!) collocation matrices.
 

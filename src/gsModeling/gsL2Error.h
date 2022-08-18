@@ -39,7 +39,7 @@ namespace gismo
 	    return math::sin(arg) / arg;
 	}
 	case 5:
-	    return 0.25 * math::exp(math::sqrt(u * u + v * v));	    
+	    return 0.25 * math::exp(math::sqrt(u * u + v * v));
 	case 6:
 	    return (2.0 / 3) * (math::exp(-1 * math::sqrt((10 * u - 3) * (10 * u - 3)
 							  +

@@ -105,6 +105,12 @@ public:
 
     void setBasis(gsBasis<T> & basis) {m_basis=&basis;}
 
+    void setWeights(gsVector<T>& weights)
+    {
+	GISMO_ASSERT(weights.size() == m_param_values.cols(), "weight size mismatch");
+	m_weights = weights;
+    }
+
     /// returns the parameter values
     gsMatrix<T> & getreturnParamValues() {return m_param_values;}
     gsMatrix<T> & returnParamValues() {return m_param_values;}
@@ -136,6 +142,15 @@ public:
 	return math::sqrt(res);
     }
 
+    T get_weightedl2Error() const
+    {
+	T res = 0;
+	auto wt = m_weights.begin();
+	for(auto it=m_pointErrors.begin(); it!=m_pointErrors.end(); ++it, ++wt)
+	    res += *wt * *it * *it;
+	return math::sqrt(res);
+    }
+
 private:
     /// Extends the system of equations by taking constraints into account.
     void extendSystem(gsSparseMatrix<T>& A_mat, gsMatrix<T>& m_B);
@@ -147,6 +162,9 @@ protected:
 
     /// the points of the point cloud
     gsMatrix<T> m_points;
+
+    /// fitting weights
+    gsVector<T> m_weights;
 
     /// Pointer keeping the basis
     gsBasis<T> * m_basis;
