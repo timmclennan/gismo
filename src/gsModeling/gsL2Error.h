@@ -66,6 +66,10 @@ namespace gismo
 		    return 0;
 	    }
 	}
+	case 9:
+	{
+	    return math::cos(10 * u * (1 + v * v)) / (1 + 10 * (u + 2 * v) * (u + 2 * v));
+	}
 	default:
 	    gsWarn << "Unknown example " << example << "." << std::endl;
 	    return 0;
@@ -73,13 +77,17 @@ namespace gismo
     }
 
     template <class T>
-    T L2Error(const gsTensorBSpline<2, T>& spline, index_t sample, bool verbose = false)
+    T L2Error(const gsTensorBSpline<2, T>& spline,
+	      index_t sample,
+	      T quA = 2.0,
+	      index_t quB = 2,
+	      bool verbose = false)
     {
 	gsOptionList legendreOpts;
-	legendreOpts.addInt   ("quRule","Quadrature rule used (1) Gauss-Legendre; (2) Gauss-Lobatto; (3) Patch-Rule",gsQuadrature::GaussLegendre);
-	legendreOpts.addReal("quA", "Number of quadrature points: quA*deg + quB", 2.0  );
-	legendreOpts.addInt ("quB", "Number of quadrature points: quA*deg + quB", 3    );
-	legendreOpts.addSwitch("overInt","Apply over-integration or not?",false);
+	legendreOpts.addInt ("quRule","Quadrature rule used (1) Gauss-Legendre; (2) Gauss-Lobatto; (3) Patch-Rule", gsQuadrature::GaussLegendre);
+	legendreOpts.addReal("quA", "Number of quadrature points: quA*deg + quB", quA);
+	legendreOpts.addInt ("quB", "Number of quadrature points: quA*deg + quB", quB);
+	legendreOpts.addSwitch("overInt", "Apply over-integration or not?", false);
 	gsQuadRule<real_t>::uPtr legendre = gsQuadrature::getPtr(spline.basis(), legendreOpts);
 
 	gsMatrix<T> points;
@@ -111,5 +119,16 @@ namespace gismo
 	}
 	return math::sqrt(result);
     }
-    
+
+    template <class T>
+    T L2Error(const gsGeometry<T>& spline,
+	      index_t sample,
+	      T quA = 2.0,
+	      index_t quB = 2,
+	      bool verbose = false)
+    {
+	auto cast = static_cast<const gsTensorBSpline<2, real_t>*>(&spline);
+	return L2Error(*cast, sample, quA, quB, verbose);
+    }
+        
 } // namespace gismo

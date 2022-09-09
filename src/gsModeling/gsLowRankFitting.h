@@ -47,8 +47,10 @@ public:
 		     const gsMatrix<T>& points,
 		     const gsVector<T>& uWeights,
 		     const gsVector<T>& vWeights,
-		     gsTensorBSplineBasis<2, T>& basis)
-	: gsFitting<T>(params, points, basis)
+		     gsTensorBSplineBasis<2, T>& basis,
+		     T zero = 1e-13,
+		     index_t sample = -1)
+	: gsFitting<T>(params, points, basis), m_zero(zero), m_sample(sample)
     {
 	initPQ(matrixUtils::diag(uWeights),
 	       matrixUtils::diag(vWeights));
@@ -56,8 +58,10 @@ public:
 
     gsLowRankFitting(const gsMatrix<T>& params,
 		     const gsMatrix<T>& points,
-		     gsTensorBSplineBasis<2, T>& basis)
-	: gsFitting<T>(params, points, basis)
+		     gsTensorBSplineBasis<2, T>& basis,
+		     T zero = 1e-13,
+		     index_t sample = -1)
+	: gsFitting<T>(params, points, basis), m_zero(zero), m_sample(sample)
     {
 	// Note: Forgetting the <T> leads to a confusing error message.
 	index_t uNpts = math::sqrt(params.cols());
@@ -88,6 +92,8 @@ public:
 
     void computeCrossWithRefAndStop(T tol, bool pivot);
 
+    int computeCrossWithStop(T epsAccept, T epsAbort, bool pivot = true);
+
     T methodB(bool printErr);
 
     T methodC(bool printErr, index_t maxIter);
@@ -104,9 +110,15 @@ public:
 
     //T L2error() const;
 
+    inline void exportl2Err(const std::string& filename) const
+    {
+	gsWriteGnuplot(m_l2Err, filename);
+    }
+
     inline void exportL2Err(const std::string& filename) const
     {
-	gsWriteGnuplot(m_L2Err, filename);
+	// We use getL2Err to cover the case of L2-errors not initialized.
+	gsWriteGnuplot(getL2Err(), filename);
     }
 
     inline void exportMaxErr(const std::string& filename) const
@@ -114,9 +126,25 @@ public:
 	gsWriteGnuplot(m_MaxErr, filename);
     }
 
-    inline const std::vector<T>& getL2Err() const
+    inline void exportDecompErr(const std::string& filename) const
     {
-	return m_L2Err;
+	gsWriteGnuplot(m_decompErr, filename);
+    }
+
+    inline const std::vector<T>& getl2Err() const
+    {
+	return m_l2Err;
+    }
+
+    inline const std::vector<T> getL2Err() const
+    {
+	if(m_L2Err.empty())
+	{
+	    gsWarn << "L2-error not computed, returning -1s." << std::endl;
+	    return std::vector<T>(m_l2Err.size(), T(-1));
+	}
+	else
+	    return m_L2Err;
     }
 
     inline const std::vector<T>& getMaxErr() const
@@ -130,6 +158,11 @@ public:
 	gsFileData<T> fd;
 	fd << test;
 	fd.dump("test");
+    }
+
+    index_t getRank() const
+    {
+	return m_rank;
     }
 
 protected:
@@ -152,7 +185,17 @@ protected:
 
     gsMatrix<T> m_P, m_Q; // The matrices P and Q from the paper.
 
-    std::vector<T> m_L2Err, m_MaxErr;
+    std::vector<T> m_l2Err, m_L2Err, m_MaxErr, m_decompErr;
+
+    index_t m_rank;
+
+    /// What is considered zero during the ACA computation.
+    T m_zero;
+
+    /// Which analytical solution to compare against in the L^2-norm.
+    /// Special value -1 means do not compute the L^2-norm at all.
+    index_t m_sample;
+
 };
 
 } // namespace gismo

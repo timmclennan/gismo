@@ -63,12 +63,12 @@ public:
     }
 
 
-    bool nextIteration(T& sigma, gsVector<T>& uVec, gsVector<T>& vVec, bool pivot)
+    bool nextIteration(T& sigma, gsVector<T>& uVec, gsVector<T>& vVec, bool pivot, T zero=1e-32)
     {
 	if(pivot)
-	    return nextPivotingIteration(sigma, uVec, vVec);
+	    return nextPivotingIteration(sigma, uVec, vVec, 0, zero);
 	else
-	    return nextFullIteration(sigma, uVec, vVec);
+	    return nextFullIteration(sigma, uVec, vVec, zero);
     }
 
     void updateMatrix(const gsMatrix<T>& matrix)
@@ -91,7 +91,7 @@ public:
 	usedJ = m_usedJ;
     }
 
-    void compute(bool pivot, index_t maxIter);
+    void compute(bool pivot, index_t maxIter, T zero = 1e-32);
 
     void getU(gsMatrix<T>& U) const
     {
@@ -115,10 +115,10 @@ public:
 
 protected:
 
-    bool nextFullIteration(T& sigma, gsVector<T>& uVec, gsVector<T>& vVec)
+    bool nextFullIteration(T& sigma, gsVector<T>& uVec, gsVector<T>& vVec, T zero=1e-15)
     {
 	index_t i=0, j=0;
-	if( !findAbsMax(i, j))
+	if( !findAbsMax(i, j, zero))
 	    return false;
 
 	// Note to future self: the order in the tensor-product is
@@ -131,7 +131,7 @@ protected:
 	return true;
     }
 
-    bool nextPivotingIteration(T& sigma, gsVector<T>& uVec, gsVector<T>& vVec, index_t shifts = 0)
+    bool nextPivotingIteration(T& sigma, gsVector<T>& uVec, gsVector<T>& vVec, index_t shifts = 0, T zero=1e-32)
     {
 	if(shifts > m_mat.rows())
 	{
@@ -141,10 +141,10 @@ protected:
 	}
 
 	index_t jk = findAbsMaxRow(m_ik);
-	if(math::abs(m_mat(m_ik, jk)) < 1e-32)
+	if(math::abs(m_mat(m_ik, jk)) < zero)
 	{
 	    m_ik = (m_ik + 1) % m_mat.rows();
-	    return nextPivotingIteration(sigma, uVec, vVec, shifts+1);
+	    return nextPivotingIteration(sigma, uVec, vVec, shifts+1, zero);
 	}
 	else
 	{
@@ -211,7 +211,7 @@ protected:
 
     /// Finds the element with the highest absolute value
     /// and returns false iff the max is equal to 0.
-    bool findAbsMax(index_t& i_res, index_t& j_res) const
+    bool findAbsMax(index_t& i_res, index_t& j_res, T zero=1e-15) const
     {
 	i_res = 0;
 	j_res = 0;
@@ -230,7 +230,7 @@ protected:
 	    }
 	}
 
-	return (math::abs(max) > 1e-15);
+	return (math::abs(max) > zero);
     }
 
     T getMaxEntry() const
@@ -297,30 +297,31 @@ protected: // elements
 };
 
 template <class T>
-void gsMatrixCrossApproximation_3<T>::compute(bool pivot, index_t maxIter)
+void gsMatrixCrossApproximation_3<T>::compute(bool pivot, index_t maxIter, T zero)
 {
     T sigma;
     gsVector<T> uVec, vVec;
-    gsInfo << "computing" << std::endl;
-    for(index_t i=0; i<m_mat.rows() && i<maxIter && nextIteration(sigma, uVec, vVec, pivot); i++)
+    for(index_t i=0; i<m_mat.rows(); i++)
     {
-	// Compute the next iteration.
-	m_U.col(i) = uVec;
-	m_V.col(i) = vVec;
-	m_T(i, i)  = sigma;
-
 	// Test for the stopping criterium.
 	// When finishing, shrink the matrices.
-	if(stopcrit())
+	if(!nextIteration(sigma, uVec, vVec, pivot, zero) || i >= maxIter || stopcrit())
 	{
-	    gsInfo << "Finishing at rank " << i+1 << "." << std::endl;
+	    gsInfo << "Finishing at rank " << i << "." << std::endl;
 	    m_U.conservativeResize(Eigen::NoChange, i);
 	    m_V.conservativeResize(Eigen::NoChange, i);
 	    m_T.conservativeResize(i, i);
 	    return;
 	}
+	else
+        {
+	    // Compute the next iteration.
+	    m_U.col(i) = uVec;
+	    m_V.col(i) = vVec;
+	    m_T(i, i)  = sigma;
+	}
     }
-    //gsInfo << "Finishing at the full rank." << std::endl;
+    gsInfo << "Finishing at the full rank." << std::endl;
 }
 
 } // namespace gismo

@@ -537,9 +537,9 @@ void lowCrossAppFit(const gsMatrix<real_t>& params,
     gsInfo << ":\n";
     fitting.computeCross(pivot, maxIter, sample);
     if(pivot)
-	fitting.exportL2Err(filename + "piv_L2.dat");
+	fitting.exportl2Err(filename + "piv_L2.dat");
     else
-	fitting.exportL2Err(filename + "full_L2.dat");
+	fitting.exportl2Err(filename + "full_L2.dat");
 
     //gsWriteParaview(*fitting.result(), "low-rank", 10000, false, true);
 
@@ -769,7 +769,7 @@ void example_4()
 	gsTensorBSplineBasis<2, real_t> basis(knots, knots);
 	gsLowRankFitting<real_t> lowRankFitting(params, points, basis);
 	lowRankFitting.computeCross(true, maxIter, sample);
-	lowL2Err.push_back(lowRankFitting.getL2Err());
+	lowL2Err.push_back(lowRankFitting.getl2Err());
     }
 
     // Compute total number of DOF.
@@ -929,7 +929,7 @@ void example_7()
     //lowRankFitting.computeCrossWithRef(false, 200, sample);
     lowRankFitting.computeCross_3(true, 200, sample);
     //gsWriteParaview(*lowRankFitting.result(), "cross-result", 10000, false, true);
-    lowRankFitting.exportL2Err("example-7.dat");
+    lowRankFitting.exportl2Err("example-7.dat");
 
     // stdFit(params, points,     numKnots,     deg, sample, tMin, tMax);
     // stdFit(params, points, 2 * numKnots + 1, deg, sample, tMin, tMax);
@@ -1148,29 +1148,383 @@ void debugging()
     gsInfo << mat << std::endl;
 }
 
+void setDomain(index_t sample, real_t &tMin, real_t &tMax)
+{
+    if(sample == 4 || sample == 6 || sample == 9)
+    {
+	tMin = -1;
+	tMax = 1;
+    }
+    else if(sample == 5)
+    {
+	tMin = 0;
+	tMax = 2;
+    }
+    else
+    {
+	tMin = 0;
+	tMax = 1;
+    }	    
+
+    gsInfo << "Sample: " << sample << ", tMin: " << tMin << ", tMax: " << tMax << std::endl;
+}
+
+void gnuplot_11(const std::string& filename, const std::string& data, real_t stdValue)
+{
+    std::ofstream fout;
+    fout.open(filename);
+    std::string rgb("'#0072bd'");
+    fout << "set style line 1 \\\n"
+	 << "linecolor rgb " << rgb << " \\\n"
+	 << "linetype 1 linewidth 2 \\\n"
+	 << "pointtype 1 pointsize 1\n" << std::endl;
+
+    fout << "set style line 11 \\\n"
+	 << "linecolor rgb " << rgb << " \\\n"
+	 << "linetype -1 dashtype 2 linewidth 2\n" << std::endl;
+
+    fout << "set log y\n"
+	 << "set format y \"10^{%L}\"\n"
+	 << std::endl;
+
+    fout << "std(p) = (p < 12 ? " << stdValue << " : 1/0)\n" << std::endl;
+
+    fout << "plot '" << data << "' index 0 with linespoints linestyle 1 title 'low-rank-fitting',\\\n"
+	 << "std(x) linestyle 11 title 'full LS fitting'" << std::endl;
+    fout.close();
+}
+
 /// Algo converges to the full approximation when
 /// $\varepsilon_{\text{abort}}=\infty$ and
 /// $\varepsilon_{\text{accept}}=0.$
-void example_11()
+void example_11(index_t sample, index_t deg, index_t numSamples, real_t epsAcc, real_t epsAbort)
 {
-    // TODO.
+    // Strange: for sample = 6, our approximation converges to the std
+    // solution if numDOF < numSamples but outperforms it when they
+    // are equal.
+
+    real_t tMin, tMax;
+    setDomain(sample, tMin, tMax);
+
+    gsMatrix<real_t> params, points;
+    sampleDataGre(numSamples, params, points, sample, tMin, tMax);
+    //sampleData(numSamples, params, points, sample, tMin, tMax);
+    std::vector<real_t> stdL2Err;
+
+    for(index_t numDOF = 10; numDOF <= numSamples; numDOF += 10)
+    {
+	index_t numKnots = numDOF - deg - 1;
+	gsKnotVector<real_t> knots(tMin, tMax, numKnots, deg+1);
+	gsTensorBSplineBasis<2, real_t> basis(knots, knots);
+	gsLowRankFitting<real_t> lowRankFitting(params, points, basis);
+	//lowRankFitting.computeCrossWithStop(0, 10);
+	index_t message = lowRankFitting.computeCrossWithStop(epsAcc, epsAbort);
+	if(message == 0)
+	    gsInfo << "success";
+	else if(message == 1)
+	    gsInfo << "cannot converge";
+	else
+	    gsInfo << "max iter reached";
+	gsInfo << std::endl;
+
+	// TODO next time: Bert's criterium is stopping too early or not at all now.
+	// The correct value seems to depend on the example but also on numDOF:
+	// for small bases it stops too early, for big ones too late.
+	// Maybe we can make it relative to the l2-error?
+
+	real_t std = stdFit(params, points, numKnots, deg, sample, tMin, tMax);
+	gsInfo << "std: " << std  << " with " << numDOF << " DOF" << std::endl;
+	stdL2Err.push_back(std);
+
+	std::string filename("example-11-" + std::to_string(numDOF));
+	lowRankFitting.exportl2Err(filename + ".dat");
+	gnuplot_11(filename + ".gnu", filename + ".dat", std);
+	if(numDOF == 10)
+	    lowRankFitting.exportDecompErr("example-11-decomp.dat");
+    }
 }
 
-int main()
+void example_12(index_t sample, index_t deg, index_t numSamples, real_t epsAcc, real_t epsAbort)
 {
+    real_t tMin, tMax;
+    setDomain(sample, tMin, tMax);
+
+    gsMatrix<real_t> params, points;
+    //sampleDataGre(numSamples, params, points, sample, tMin, tMax);
+    sampleData(numSamples, params, points, sample, tMin, tMax);
+    std::vector<real_t> stdl2Err;
+
+    gsKnotVector<real_t> knots(tMin, tMax, 0, deg+1);
+    gsTensorBSplineBasis<2, real_t> basis(knots, knots);
+
+    std::vector<real_t> totDOF, stdCost, lowCost;
+
+    do
+    {
+	totDOF.push_back(basis.size());
+	gsLowRankFitting<real_t> lowRankFitting(params, points, basis);
+	index_t message = lowRankFitting.computeCrossWithStop(epsAcc, epsAbort, sample);
+	if(message == 0)
+	    gsInfo << "success";
+	else if(message == 1)
+	    gsInfo << "cannot converge";
+	else
+	    gsInfo << "max iter reached";
+	gsInfo << std::endl;
+	lowCost.push_back(2 * lowRankFitting.getRank());
+
+	index_t numDOF = basis.size(0);
+	index_t numKnots = numDOF - deg - 1;
+	real_t std = stdFit(params, points, numKnots, deg, sample, tMin, tMax);
+	gsInfo << "std: " << std  << " with " << numDOF << " DOF" << std::endl;
+	stdl2Err.push_back(std);
+	stdCost.push_back(math::sqrt(params.cols()) + numDOF);
+
+	std::string filename("example-12-" + std::to_string(numDOF));
+	lowRankFitting.exportl2Err(filename + "-l2.dat");
+	gnuplot_11(filename + "-l2.gnu", filename + "-l2.dat", std);
+
+	basis.uniformRefine();
+    } while(basis.size(0) <= numSamples);
+
+    gsWriteGnuplot(totDOF, lowCost, "example-12-low-cost.dat");
+    gsWriteGnuplot(totDOF, stdCost, "example-12-std-cost.dat");
+
+    real_t lowTotCost(0), stdTotCost(0);
+    for(auto it=lowCost.begin(); it!=lowCost.end(); ++it)
+	lowTotCost += *it;
+    for(auto it=stdCost.begin(); it!=stdCost.end(); ++it)
+	stdTotCost += *it;
+
+    gsInfo << "total low cost: " << lowTotCost << ", total std cost: " << stdTotCost << std::endl;
+}
+
+/// Returns i-th colour from the bright colour scheme for qualitative
+/// data from https://personal.sron.nl/~pault/.
+std::string paultBright(index_t i)
+{
+    switch(i)
+    {
+    case 0:
+	return "'#4477aa'";
+    case 1:
+	return "'#66ccee'";
+    case 2:
+	return "'#228833'";
+    case 3:
+	return "'#ccbb44'";
+    case 4:
+	return "'#ee6677'";
+    case 5:
+	return "'#aa3377'";
+    case 6:
+	return "'#bbbbbb'";
+    default:
+	gsWarn << "Index out of the scale 0, ..., 6" << std::endl;
+	return "";	    
+    }
+}
+
+void gnuplotWriteColourArray(std::ofstream& fout, size_t size)
+{
+    fout << "array Rgb[" << size << "]\n";
+    for(size_t i=0; i<size; i++)
+	fout << "Rgb[" << i+1 << "] = " << paultBright(i) << "\n";
+    fout << std::endl;
+}
+
+void gnuplot_13(const std::vector<index_t> numsDOF,
+		const std::vector<std::vector<real_t>>& errsL2Int,
+		const std::vector<std::vector<real_t>>& errsL2Gre,
+		const std::vector<std::string>& filenames,
+		const std::string& filename)
+{
+    size_t size = numsDOF.size();
+    GISMO_ASSERT(filenames.size() == size, "filenames of wrong size");
+    GISMO_ASSERT(errsL2Int.size() == size, "errsL2Int of wrong size");
+    GISMO_ASSERT(errsL2Gre.size() == size, "errsL2Gre of wrong size");
+
+    std::ofstream fout;
+    fout.open(filename);
+    gnuplotWriteColourArray(fout, size);
+
+    fout << "do for [i=1:" << size << "] {\n"
+	 << "    set style line 2 * i - 1 linetype i pointtype i linewidth 0 pointsize 1"
+	 << " lc rgb Rgb[i] dashtype 2\n"
+	 << "    set style line 2 * i     linetype i pointtype i linewidth 0 pointsize 1"
+	 << " lc rgb Rgb[i]\n"
+	 << "}\n";
+    fout << std::endl;
+
+    fout << "set xrange[0:30]\n"
+	 << "set yrange[1e-5:0.2]\n"
+	 << "set log y\n"
+	 << "set xlabel \"rank\"\n"
+	 << "set ylabel \"L2-error\"\n"
+	 << "set format y \"10^{%L}\"\n"
+	 << std::endl;
+
+    fout << "plot ";
+    for(size_t i=0; i<size; i++)
+    {
+	std::string filenameInt = filenames[i] + "-int.dat";
+	std::string filenameGre = filenames[i] + "-gre.dat";
+	gsWriteGnuplot(errsL2Int[i], filenameInt);
+	gsWriteGnuplot(errsL2Gre[i], filenameGre);
+
+	fout << "'" << filenameGre << "' index 0 with linespoints linestyle " << 2*i+1
+	     << " title 'low rank interpolation, "
+	     << numsDOF[i] << "x" << numDOF[i] << " DOF', \\"
+	     << std::endl << "     "
+	     << "'" << filenameInt << "' index 0 with linespoints linestyle " << 2*i+2
+	     << " title 'low rank fitting with weights, "
+	     << numsDOF[i] << "x" << numDOF[i] << " DOF'";
+	if(i != size - 1)
+	    fout << ", \\" << std::endl << "     ";
+	fout << std::endl;
+    }
+    fout.close();
+}
+
+void example_13(index_t sample, index_t deg, index_t numSamples, real_t epsAcc, real_t epsAbort,
+		real_t quA, index_t quB)
+{
+    real_t tMin, tMax, zero = 1e-13;
+    setDomain(sample, tMin, tMax);
+    bool pivot = true;
+
+    std::vector<index_t>             numsDOF;
+    std::vector<std::vector<real_t>> errsL2Int, errsL2Gre;
+    std::vector<std::string>         filenames;
+
+    for(index_t numDOF = 50; numDOF <= 400; numDOF *= 2)
+    {
+	numsDOF.push_back(numDOF);
+
+	// 1. Take a tensor-product basis for fitting.
+	index_t numKnots = numDOF - deg -1;
+	gsKnotVector<real_t> kv(tMin, tMax, numKnots, deg + 1);
+	gsTensorBSplineBasis<2, real_t> fittingBasis(kv, kv);
+
+	// 2. Sample points and weights for a quadrature rule.
+	gsVector<real_t> uWeights, vWeights;
+	gsMatrix<real_t> paramsInt, pointsInt, paramsGre, pointsGre;
+	sampleDataGauss<real_t>(fittingBasis, paramsInt, pointsInt, uWeights, vWeights,
+				sample, quA, quB);
+	gsInfo << "Sampled " << paramsInt.cols() << " points, fitting with "
+	       << fittingBasis.size() << " DOF." << std::endl;
+
+	// 3. Approximate in the least-squares sense.
+	gsLowRankFitting<real_t> fittingInt(paramsInt, pointsInt, uWeights, vWeights,
+					    fittingBasis, zero, sample);
+	gsInfo << "CrossApp fitting with weights and pivoting:\n";
+	fittingInt.computeCrossWithStop(epsAcc, epsAbort, pivot);
+	errsL2Int.push_back(fittingInt.getL2Err());
+
+	// 4. Compare with the full fitting without weights.
+	//stdFit(paramsInt, pointsInt, numKnots, deg, sample, tMin);
+
+	// 5. Compare with Irina & Clemens using the same spline space.
+	sampleDataGre(numDOF, paramsGre, pointsGre, sample, tMin, tMax, deg);
+	gsInfo << "Sampled " << paramsGre.cols() << " points, fitting with "
+	       << fittingBasis.size() << " DOF." << std::endl;
+	gsLowRankFitting<real_t> fittingGre(paramsGre, pointsGre, fittingBasis, zero, sample);
+	fittingGre.computeCrossWithStop(epsAcc, epsAbort, pivot);
+	errsL2Gre.push_back(fittingGre.getL2Err());
+
+	filenames.push_back("example-13-" + std::to_string(numDOF));
+    }
+
+    gnuplot_13(numsDOF, errsL2Int, errsL2Gre, filenames, "example-13.gnu");
+}
+
+int main(int argc, char *argv[])
+{
+    index_t numSamples = 100;
+    index_t numDOF = 50;
+    index_t deg = 3;
+    index_t sample = 6;
+    index_t example = 11;
+    index_t quB = 1;
+
+    real_t epsAbort(1);
+    real_t epsAcc(0);
+    real_t quA = 1;
+
+    gsCmdLine cmd("Choose the example and its parameters.");
+    cmd.addInt("m", "samples", "number of samples", numSamples);
+    cmd.addInt("n", "dofs", "number of degrees of freedom", numDOF);
+    cmd.addInt("d", "deg", "degree of approximation", deg);
+    cmd.addInt("s", "sample", "id of the input function", sample);
+    cmd.addInt("e", "example", "which example to compute", example);
+    cmd.addInt("r", "quB", "quB in the quadrature rule", quB);
+    cmd.addReal("a", "abort", "epsilon abort for Algorithm 1", epsAbort);
+    cmd.addReal("t", "tol", "epsilon accept for Algorithm 1", epsAcc);
+    cmd.addReal("q", "quA", "quA in the quadrature rule", quA);
+    try
+    {
+	cmd.getValues(argc, argv);
+    }
+    catch(int rv)
+    {
+	return rv;
+    }
+
+    // if(numDOF > numSamples)
+    // {
+    // 	gsWarn << "numDOF(" << numDOF << ") is greater than numSamples("
+    // 	       << numSamples << "), which would crash. Exiting." << std::endl;
+    // 	return -1;
+    // }
+
     //development();
     //debugging();
 
-    //example_1();
-    //example_2();
-    //example_3();
-    //example_4();
-    //example_5();
-    //example_6();
-    //example_7();
-    //example_8();
-    //example_9();
-    example_10();
+    switch(example)
+    {
+    case 1:
+	example_1();
+	break;
+    case 2:
+	example_2();
+	break;
+    case 3:
+	example_3();
+	break;
+    case 4:
+	example_4();
+	break;
+    case 5:
+	example_5();
+	break;
+    case 6:
+	example_6();
+	break;
+    case 7:
+	example_7();
+	break;
+    case 8:
+	example_8();
+	break;
+    case 9:
+	example_9();
+	break;
+    case 10:
+	example_10();
+	break;
+    case 11:
+	example_11(sample, deg, numSamples, epsAcc, epsAbort);
+	break;
+    case 12:
+	example_12(sample, deg, numSamples, epsAcc, epsAbort);
+	break;
+    case 13:
+	example_13(sample, deg, numSamples, epsAcc, epsAbort, quA, quB);
+	break;
+    default:
+	gsWarn << "Unknown example, exiting." << std::endl;
+	return -1;
+    }
 
     //checkCrossApp(5, false);
     //profiling_1();
