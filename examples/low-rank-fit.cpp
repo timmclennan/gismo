@@ -1672,14 +1672,22 @@ void example_15(index_t deg,
     index_t sample = -1; // We don't compute the L2-error.
     real_t zero = 1e-13;
 
-    gsFileData<> fd("/ya/ya108/ya10813/w/gismo/low-rank/release/tmtf-one-surf.xml");
-    gsTensorBSpline<2>::uPtr spline = fd.getFirst<gsTensorBSpline<2>>();
+    gsFileData<> fd1("crescendo/tmtf-one-surf.xml");
+    gsTensorBSpline<2>::uPtr spline = fd1.getFirst<gsTensorBSpline<2>>();
 
     gsMatrix<real_t> params, points;
     if(gre)
-	sampleDataGre<real_t>(uNumSamples, vNumSamples, params, points, *spline);
+    	sampleDataGre<real_t>(uNumSamples, vNumSamples, params, points, *spline);
     else
-	sampleDataUniform<real_t>(*spline, uNumSamples, vNumSamples, params, points);
+    	sampleDataUniform<real_t>(*spline, uNumSamples, vNumSamples, params, points);
+    gsInfo << "params: (" << params.rows() << "x" << params.cols() << ")" << std::endl; 
+    gsInfo << "points: (" << points.rows() << "x" << points.cols() << ")" << std::endl; 
+
+    gsFileData<> fd2("crescendo/tmtf-input.xml");
+    fd2.getId<gsMatrix<>>(0, params);
+    fd2.getId<gsMatrix<>>(1, points);
+    gsInfo << "params: (" << params.rows() << "x" << params.cols() << ")" << std::endl; 
+    gsInfo << "points: (" << points.rows() << "x" << points.cols() << ")" << std::endl; 
     
     std::vector<std::vector<real_t>> maxErrs;
 
