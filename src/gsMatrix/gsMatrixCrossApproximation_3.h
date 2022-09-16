@@ -37,12 +37,14 @@ public:
     gsMatrixCrossApproximation_3(const gsMatrix<T>& matrix, index_t stopcrit=1)
 	: m_Z(matrix),
 	  m_mat(matrix),
-	  m_U(m_mat.rows(), m_mat.cols()),
-	  m_V(m_mat.cols(), m_mat.cols()),
-	  m_T(m_mat.rows(), m_mat.cols()),
 	  m_ik(0), m_uNum(m_mat.cols()),
 	  m_stopcrit(stopcrit)
     {
+	index_t maxRank = std::min(m_mat.rows(), m_mat.cols());
+	m_U.resize(m_mat.rows(), maxRank);
+	m_V.resize(m_mat.cols(), maxRank);
+	m_T.resize(maxRank, maxRank);
+	
 	m_U.setZero(); // for computing ptsApprox
 	m_V.setZero(); // for computing ptsApprox
 	m_T.setZero();
@@ -301,7 +303,8 @@ void gsMatrixCrossApproximation_3<T>::compute(bool pivot, index_t maxIter, T zer
 {
     T sigma;
     gsVector<T> uVec, vVec;
-    for(index_t i=0; i<m_mat.rows(); i++)
+    index_t maxRank = std::min(m_mat.rows(), m_mat.cols());
+    for(index_t i=0; i<maxRank; i++)
     {
 	// Test for the stopping criterium.
 	// When finishing, shrink the matrices.
@@ -321,7 +324,7 @@ void gsMatrixCrossApproximation_3<T>::compute(bool pivot, index_t maxIter, T zer
 	    m_T(i, i)  = sigma;
 	}
     }
-    gsInfo << "Finishing at the full rank." << std::endl;
+    gsInfo << "Finishing at the full rank (" << maxRank << ")." << std::endl;
 }
 
 } // namespace gismo

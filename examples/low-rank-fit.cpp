@@ -224,6 +224,38 @@ T l2Error(const gsGeometry<T>* result,
 
 template <class T>
 void sampleData(const gsVector<T>& uPar, const gsVector<T>& vPar,
+		gsMatrix<T>& params, gsMatrix<T>& points,
+		const gsGeometry<T>& geometry)
+{
+    index_t uNum = uPar.size();
+    index_t vNum = vPar.size();
+    index_t numSamples = uNum * vNum;
+
+    params.resize(2, numSamples);
+
+    for(index_t i=0; i<uNum; i++)
+    {
+	for(index_t j=0; j<vNum; j++)
+	{
+	    index_t glob = j * uNum + i;
+	    T u = uPar(i);
+	    T v = vPar(j);
+
+	    params(0, glob) = u;
+	    params(1, glob) = v;
+
+	}
+    }
+
+    // gsInfo << "params:\n" << params << std::endl;
+    // gsInfo << "points:\n" << points << std::endl;
+
+    geometry.eval_into(params, points);
+
+}
+
+template <class T>
+void sampleData(const gsVector<T>& uPar, const gsVector<T>& vPar,
 		gsMatrix<T>& params, gsMatrix<T>& points, index_t sample)
 {
     index_t uNum = uPar.size();
@@ -308,6 +340,25 @@ void sampleDataGre(index_t numSide, gsMatrix<T>& params, gsMatrix<T>& points,
 {
     gsKnotVector<T> kv(minT, maxT, numSide - deg - 1, deg + 1);
     sampleDataGre(kv, kv, params, points, sample);
+}
+
+template <class T>
+void sampleDataGre(index_t uNum, index_t vNum,
+		   gsMatrix<T>& params, gsMatrix<T>& points,
+		   const gsGeometry<T>& geometry,
+		   T uMin = 0, T uMax = 1, T vMin = 0, T vMax = 1, index_t deg = 3)
+{
+    gsKnotVector<T> uKnots(uMin, uMax, uNum - deg - 1, deg + 1);
+    gsKnotVector<T> vKnots(vMin, vMax, vNum - deg - 1, deg + 1);
+    
+    gsMatrix<T> uGre, vGre;
+    uKnots.greville_into(uGre);
+    vKnots.greville_into(vGre);
+
+    gsVector<T> uPar = uGre.row(0);
+    gsVector<T> vPar = vGre.row(0);
+
+    sampleData(uPar, vPar, params, points, geometry);
 }
 
 template <class T>
@@ -464,40 +515,17 @@ void sampleDataMeshVertices(gsMatrix<T>& params,
 	params(1, glob) = v;
 	points(0, glob) = evalSample(u, v, sample);
     }
-}
+}		
 
 template <class T>
 void sampleDataUniform(const gsGeometry<T>& geometry,
 		       index_t uNum, index_t vNum,
 		       gsMatrix<T>& params, gsMatrix<T>& points)
 {
-  gsVector<T> uPar = sampleUniform(uNum, T(0), T(1));
-  gsVector<T> vPar = sampleUniform(vNum, T(0), T(1));
+    gsVector<T> uPar = sampleUniform(uNum, T(0), T(1));
+    gsVector<T> vPar = sampleUniform(vNum, T(0), T(1));
 
-  // TODO: The following should be sampleData.
-    index_t numSamples = uNum * vNum;
-
-    params.resize(2, numSamples);
-    //points.resize(3, numSamples);
-
-    for(index_t i=0; i<uNum; i++)
-    {
-	for(index_t j=0; j<vNum; j++)
-	{
-	    index_t glob = j * vNum + i;
-	    T u = uPar(i);
-	    T v = vPar(j);
-
-	    params(0, glob) = u;
-	    params(1, glob) = v;
-
-	}
-    }
-
-    // gsInfo << "params:\n" << params << std::endl;
-    // gsInfo << "points:\n" << points << std::endl;
-
-    geometry.eval_into(params, points);
+    sampleData(uPar, vPar, params, points, geometry);
 }
 
 real_t stdFit(const gsMatrix<real_t>& params,
@@ -523,6 +551,26 @@ real_t stdFit(const gsMatrix<real_t>& params,
     // gsInfo << "just checking:\n";
     // printErrors(fitting.result(), params, points);
     //return L2Err;
+    return fitting.get_l2Error();
+}
+
+real_t stdFit(const gsMatrix<real_t>& params,
+	      const gsMatrix<real_t>& points,
+	      index_t uNumKnots,
+	      index_t vNumKnots,
+	      index_t deg,
+	      index_t sample,
+	      real_t minU = 0.0,
+	      real_t maxU = 1.0)
+{
+    gsKnotVector<real_t> uKnots(minU, maxU, uNumKnots, deg+1);
+    gsKnotVector<real_t> vKnots(minU, maxU, uNumKnots, deg+1);
+    gsTensorBSplineBasis<2, real_t> basis(uKnots, vKnots);
+    
+    gsFitting<real_t> fitting(params, points, basis);
+    fitting.compute();
+    fitting.computeErrors();
+    //gsWriteParaview(*fitting.result(), "fitting", 10000, false, true);
     return fitting.get_l2Error();
 }
 
@@ -1606,15 +1654,19 @@ void gnuplot_15(const std::vector<real_t> xErr,
     for(size_t i=0; i<maxSize; i++)
     	err[i] = math::sqrt(xErr[i] * xErr[i] + yErr[i] * yErr[i] + zErr[i] * zErr[i]);
 
-    gsWriteGnuplot(err, "example-15-x.dat");
-    gsWriteGnuplot(err, "example-15-y.dat");
-    gsWriteGnuplot(err, "example-15-z.dat");
+    // gsWriteGnuplot(err, "example-15-x.dat");
+    // gsWriteGnuplot(err, "example-15-y.dat");
+    // gsWriteGnuplot(err, "example-15-z.dat");
     gsWriteGnuplot(err, "example-15.dat");	
 }
 
-void example_15(index_t deg, index_t numSamples, index_t numDOF, real_t epsAcc, real_t epsAbort, bool pivot)
+void example_15(index_t deg,
+		index_t uNumSamples, index_t vNumSamples,
+		index_t uNumDOF, index_t vNumDOF,
+		real_t epsAcc, real_t epsAbort, bool pivot, bool gre)
 {
-    index_t numKnots = numDOF - deg - 1;
+    index_t uNumKnots = uNumDOF - deg - 1;
+    index_t vNumKnots = vNumDOF - deg - 1;
     real_t tMin(0), tMax(1);
     gsErrType errType = gsErrType::max;
     index_t sample = -1; // We don't compute the L2-error.
@@ -1624,30 +1676,39 @@ void example_15(index_t deg, index_t numSamples, index_t numDOF, real_t epsAcc, 
     gsTensorBSpline<2>::uPtr spline = fd.getFirst<gsTensorBSpline<2>>();
 
     gsMatrix<real_t> params, points;
-    sampleDataUniform<real_t>(*spline, numSamples, numSamples, params, points);
+    if(gre)
+	sampleDataGre<real_t>(uNumSamples, vNumSamples, params, points, *spline);
+    else
+	sampleDataUniform<real_t>(*spline, uNumSamples, vNumSamples, params, points);
+    
     std::vector<std::vector<real_t>> maxErrs;
 
-    gsKnotVector<real_t> knots(tMin, tMax, numKnots, deg+1);
-    gsTensorBSplineBasis<2, real_t> basis(knots, knots);
+    gsKnotVector<real_t> uKnots(tMin, tMax, uNumKnots, deg+1);
+    gsKnotVector<real_t> vKnots(tMin, tMax, vNumKnots, deg+1);
+    gsTensorBSplineBasis<2, real_t> basis(uKnots, vKnots);
     gsMatrix<real_t> coefs(basis.size(), 3);
     for(index_t i=0; i<3; i++)
     {
-	gsLowRankFitting<real_t> lowRankFitting(params, points.row(i), basis, zero, sample, errType);
+	gsLowRankFitting<real_t> lowRankFitting(params, points.row(i), basis, zero, sample, errType, uNumSamples);
 	lowRankFitting.computeCrossWithStop(epsAcc, epsAbort, pivot);
 	coefs.col(i) = lowRankFitting.result()->coefs();
 	maxErrs.push_back(lowRankFitting.getMaxErr());
 
-	gsInfo << "std: " << stdFit(params, points.row(i), numKnots, deg, -1, tMin, tMax) << std::endl;
+	gsInfo << "std: " << stdFit(params, points.row(i), uNumKnots, vNumKnots, deg, -1, tMin, tMax) << std::endl;
     }
 
     gnuplot_15(maxErrs[0], maxErrs[1], maxErrs[2]);
-    //gsWriteParaview(gsTensorBSpline<2>(basis, coefs), "result");
+    gsWriteParaview(gsTensorBSpline<2>(basis, coefs), "result", 10000, false, true);
 }
 
 int main(int argc, char *argv[])
 {
     index_t numSamples = 100;
+    index_t uNumSamples = 150;
+    index_t vNumSamples = 40;
     index_t numDOF = 50;
+    index_t uNumDOF = 75;
+    index_t vNumDOF = 20;
     index_t deg = 3;
     index_t sample = 6;
     index_t example = 11;
@@ -1658,6 +1719,7 @@ int main(int argc, char *argv[])
     real_t quA = 1;
 
     bool pivot = false;
+    bool gre = false;
 
     gsCmdLine cmd("Choose the example and its parameters.");
     cmd.addInt("m", "samples", "number of samples in each direction", numSamples);
@@ -1670,6 +1732,11 @@ int main(int argc, char *argv[])
     cmd.addReal("t", "tol", "epsilon accept for Algorithm 1", epsAcc);
     cmd.addReal("q", "quA", "quA in the quadrature rule", quA);
     cmd.addSwitch("p", "piv", "whether to use pivoting in ACA", pivot);
+    cmd.addSwitch("g", "gre", "whether to use Greville abscissae instead of uniform sampling", gre);
+    cmd.addInt("b", "usamples", "number of samples in the u-direction", uNumSamples);
+    cmd.addInt("c", "vsamples", "number of samples in the v-direction", vNumSamples);
+    cmd.addInt("f", "udof", "number of DOF in the u-direction", uNumDOF);
+    cmd.addInt("i", "vdof", "number of DOF in the v-direction", vNumDOF);
     try
     {
 	cmd.getValues(argc, argv);
@@ -1724,7 +1791,7 @@ int main(int argc, char *argv[])
 	example_14(sample, deg, numSamples, epsAcc, epsAbort);
 	break;
     case 15:
-	example_15(deg, numSamples, numDOF, epsAcc, epsAbort, pivot);
+	example_15(deg, uNumSamples, vNumSamples, uNumDOF, vNumDOF, epsAcc, epsAbort, pivot, gre);
 	break;
     default:
 	gsWarn << "Unknown example, exiting." << std::endl;

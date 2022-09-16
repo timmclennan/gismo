@@ -59,18 +59,31 @@ public:
 	       matrixUtils::diag(vWeights));
     }
 
+    /**
+       Constructor.
+
+       \param uNpts Number of data points in u-direction. Special
+       value -1 means that params form a quadratic array and the value
+       can be inferred.
+     */
     gsLowRankFitting(const gsMatrix<T>& params,
 		     const gsMatrix<T>& points,
 		     gsTensorBSplineBasis<2, T>& basis,
 		     T zero = 1e-13,
 		     index_t sample = -1,
-		     gsErrType errType = gsErrType::l2)
-	: gsFitting<T>(params, points, basis), m_zero(zero), m_sample(sample), m_errType(errType)
+		     gsErrType errType = gsErrType::l2,
+		     index_t uNpts = -1)
+	: gsFitting<T>(params, points, basis), m_zero(zero), m_sample(sample), m_errType(errType), m_uNpts(uNpts)
     {
 	// Note: Forgetting the <T> leads to a confusing error message.
-	index_t uNpts = math::sqrt(params.cols());
-	initPQ(matrixUtils::identity<T>(uNpts),
-	       matrixUtils::identity<T>(uNpts));
+
+	// If uNpts not given, compute it.
+	if(m_uNpts == -1)
+	    m_uNpts = math::sqrt(params.cols());
+
+	index_t vNpts = params.cols() / m_uNpts;
+	initPQ(matrixUtils::identity<T>(m_uNpts),
+	       matrixUtils::identity<T>(  vNpts));
     }
 
     void computeCross(bool pivot, index_t maxIter, index_t sample);
@@ -201,6 +214,9 @@ protected:
     index_t m_sample;
 
     gsErrType m_errType;
+
+    // Number of data points in u-direction.
+    index_t m_uNpts;
 };
 
 } // namespace gismo

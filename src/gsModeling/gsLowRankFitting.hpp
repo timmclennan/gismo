@@ -26,17 +26,19 @@ index_t gsLowRankFitting<T>::partitionParam(gsMatrix<T>& uPar, gsMatrix<T>& vPar
 	uNum++;
 	prevMax = this->m_param_values(0, i);
     }
-    //gsInfo << "uNum: " << uNum << std::endl;
+    index_t vNum = this->m_param_values.cols() / uNum;
+    // gsInfo << "uNum: " << uNum << std::endl;
+    // gsInfo << "vNum: " << vNum << std::endl;
 
     // Separate the u- and v-parameters.
-    // TODO: Rectangular arrays.
     uPar.resize(1, uNum);
-    vPar.resize(1, uNum);
+    vPar.resize(1, vNum);
     for(index_t i=0; i<uNum; i++)
-    {
     	uPar(0, i) = this->m_param_values(0, i);
-    	vPar(0, i) = this->m_param_values(1, i * uNum);
-    }
+
+    for(index_t j=0; j<vNum; j++)
+	vPar(0, j) = this->m_param_values(1, j * uNum);
+
     // gsInfo << "uPar:\n" << uPar << std::endl;
     // gsInfo << "vPar:\n" << vPar << std::endl;
     return uNum;
@@ -46,8 +48,10 @@ template <class T>
 gsMatrix<T> gsLowRankFitting<T>::convertToMN(index_t rows) const
 {
     gsMatrix<T> result(rows, this->m_points.rows() / rows);
+
     for(index_t i=0; i<this->m_points.rows(); i++)
 	result(i%rows, i/rows) = this->m_points(i, 0);
+
     return result;
 }
 
@@ -55,8 +59,10 @@ template <class T>
 gsSparseMatrix<T> gsLowRankFitting<T>::convertToSparseMN(index_t rows) const
 {
     gsSparseMatrix<T> result(rows, this->m_points.rows() / rows);
+
     for(index_t i=0; i<this->m_points.rows(); i++)
 	result(i%rows, i/rows) = this->m_points(i, 0);
+
     return result;
 }
 
@@ -64,12 +70,12 @@ template <class T>
 gsMatrix<T> gsLowRankFitting<T>::convertBack(const gsMatrix<T>& points) const
 {
     gsMatrix<T> result(1, points.rows() * points.cols());
+
     for(index_t i=0; i<points.rows(); i++)
 	for(index_t j=0; j<points.cols(); j++)
-	    result(points.cols() * j + i) = points(i, j);
+	    result(points.rows() * j + i) = points(i, j);
 
-    return result;
-	    
+    return result;	    
 }
 
 template <class T>
@@ -1000,7 +1006,8 @@ int gsLowRankFitting<T>::computeCrossWithStop(T epsAccept, T epsAbort, bool pivo
 {
     gsMatrix<T> coefs;
 
-    index_t uNum = math::sqrt(this->m_param_values.cols());
+    index_t uNum = m_uNpts;
+    index_t vNum = this->m_param_values.cols() / uNum;
     gsMatrix<T> ptsMN = convertToMN(uNum);
     Eigen::ColPivHouseholderQR<gsMatrix<T>> qrDecomp(ptsMN);
     gsInfo << "data rank: " << qrDecomp.rank() << std::endl;
@@ -1010,10 +1017,10 @@ int gsLowRankFitting<T>::computeCrossWithStop(T epsAccept, T epsAbort, bool pivo
     T l2Err(1), maxErr(1), currErr(1), L2Err(-1);
 
     gsMatrix<T> uMat(uNum, 0);
-    gsMatrix<T> vMat(uNum, 0);
+    gsMatrix<T> vMat(vNum, 0);
     gsMatrix<T> tMat(0, 0);
 
-    gsMatrix<T> residua(uNum, uNum);
+    gsMatrix<T> residua(uNum, vNum);
     residua.setZero();
 
     crossApp.compute(pivot, uNum, m_zero);
