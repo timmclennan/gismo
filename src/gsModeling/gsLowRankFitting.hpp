@@ -200,7 +200,7 @@ void gsLowRankFitting<T>::computeCross(bool pivot,
 	if(!scnm)
 	    gsInfo << "Finishing at rank " << i+1 << "." << std::endl;
 	prevErr = l2Err;
-	m_MaxErr.push_back(maxErr);
+	m_maxErr.push_back(maxErr);
 	m_L2Err.push_back(l2Err);
     }
     //gsWriteParaview(*this->m_result, "result");
@@ -282,7 +282,7 @@ void gsLowRankFitting<T>::computeCross_3(bool pivot,
 	if(!scnm)
 	    gsInfo << "Finishing at rank " << i+1 << "." << std::endl;
 	prevErr = l2Err;
-	m_MaxErr.push_back(maxErr);
+	m_maxErr.push_back(maxErr);
 	m_L2Err.push_back(l2Err);
     }
 
@@ -299,7 +299,7 @@ void gsLowRankFitting<T>::computeCross_3(bool pivot,
 	T maxErr = this->maxPointError();
 	T l2Err = L2Error(*static_cast<gsTensorBSpline<2, T>*>(this->result()), sample);
 	gsInfo << "(R) max err piv: " << maxErr << ", l2 err piv: " << l2Err << std::endl;
-	m_MaxErr.push_back(maxErr);
+	m_maxErr.push_back(maxErr);
 	m_L2Err.push_back(l2Err);
     }
     }*/
@@ -344,7 +344,7 @@ void gsLowRankFitting<T>::computeCross_3(bool pivot,
 	T maxErr = this->maxPointError();
 	T l2Err = L2Error(*static_cast<gsTensorBSpline<2, T>*>(this->result()), sample);
 	gsInfo << "(R) max err piv: " << maxErr << ", l2 err piv: " << l2Err << std::endl;
-	m_MaxErr.push_back(maxErr);
+	m_maxErr.push_back(maxErr);
 	m_L2Err.push_back(l2Err);
     }
 }
@@ -795,7 +795,7 @@ void gsLowRankFitting<T>::computeCrossWithRef(bool pivot,
 	{
 	    // Continue
 	    prevErr = l2Err;
-	    m_MaxErr.push_back(maxErr);
+	    m_maxErr.push_back(maxErr);
 	    m_L2Err.push_back(l2Err);
 	}
     }
@@ -882,7 +882,7 @@ void gsLowRankFitting<T>::computeCrossWithRef(bool pivot,
 	{
 	    // Continue
 	    prevErr = l2Err;
-	    m_MaxErr.push_back(maxErr);
+	    m_maxErr.push_back(maxErr);
 	    m_L2Err.push_back(l2Err);
 	}
     }
@@ -1007,7 +1007,7 @@ int gsLowRankFitting<T>::computeCrossWithStop(T epsAccept, T epsAbort, bool pivo
 
     gsMatrixCrossApproximation_3<T> crossApp(ptsMN, 0);
     gsVector<T> uVec, vVec;
-    T l2Err(1);
+    T l2Err(1), maxErr(1), currErr(1), L2Err(-1);
 
     gsMatrix<T> uMat(uNum, 0);
     gsMatrix<T> vMat(uNum, 0);
@@ -1048,28 +1048,49 @@ int gsLowRankFitting<T>::computeCrossWithStop(T epsAccept, T epsAbort, bool pivo
 	gsMatrix<T> values = m_X.transpose() * coefs * m_Y;
 	gsMatrix<T> pointwiseErr = ptsMN - values;
 	l2Err = pointwiseErr.norm();
+	maxErr = std::max(math::abs(pointwiseErr.maxCoeff()),
+			  math::abs(pointwiseErr.minCoeff()));
 
 	// gsInfo << "iteration " << i << ", sqrt(DOF) " << coefs.rows() << ", ";
-	gsInfo << "l2 err: " << l2Err << ", rest: " << rest << ", diff: " << l2Err - rest << std::endl;
+	gsInfo << "l2 err: " << l2Err << ", rest: " << rest << ", diff: " << l2Err - rest
+	       << ", max err: " << maxErr << std::endl;
 
-	// Save the l2-error ...
+	// Save the l2- and max-error ...
 	m_l2Err.push_back(l2Err);
+	m_maxErr.push_back(maxErr);
+
 	// ... and the L2-error as well, if required.
 	if(m_sample != -1)
 	{
 	    this->m_result=this->m_basis->makeGeometry(give(convertBack(coefs).transpose())).release();
 	    m_L2Err.push_back(L2Error(*(this->m_result), m_sample));
-	}	
+	}
+
+	switch(m_errType)
+	{
+	case gsErrType::l2 :
+	    currErr = l2Err;
+	    break;
+	case gsErrType::max :
+	    currErr = maxErr;
+	    break;
+	case gsErrType::L2 :
+	    currErr = L2Err;
+	    break;
+	default:
+	    gsWarn << "Undefined error type." << std::endl;
+	    break;
+	}
 
 	// Figure out what to do.
-	if(l2Err < epsAccept)
+	if(currErr < epsAccept)
 	{
 	    gsInfo << "Finished after iteration " << i+1 << std::endl;
 	    result = 0; // success
 	    break;
 	}
 	//else if(l2Err - rest > 0.9 * l2Err) // Seems to work decently!
-	else if(l2Err - rest > epsAbort)
+	else if(currErr - rest > epsAbort)
 	{
 	    gsInfo << "Aborting after iteration " << i+1 << std::endl;
 	    result = 1; // cannot converge

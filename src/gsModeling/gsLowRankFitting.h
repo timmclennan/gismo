@@ -33,6 +33,8 @@
 namespace gismo
 {
 
+    enum class gsErrType {l2, max, L2};
+
 template <class T>
 class gsLowRankFitting : public gsFitting<T>
 {
@@ -49,8 +51,9 @@ public:
 		     const gsVector<T>& vWeights,
 		     gsTensorBSplineBasis<2, T>& basis,
 		     T zero = 1e-13,
-		     index_t sample = -1)
-	: gsFitting<T>(params, points, basis), m_zero(zero), m_sample(sample)
+		     index_t sample = -1,
+		     gsErrType errType = gsErrType::l2)
+	: gsFitting<T>(params, points, basis), m_zero(zero), m_sample(sample), m_errType(errType)
     {
 	initPQ(matrixUtils::diag(uWeights),
 	       matrixUtils::diag(vWeights));
@@ -60,8 +63,9 @@ public:
 		     const gsMatrix<T>& points,
 		     gsTensorBSplineBasis<2, T>& basis,
 		     T zero = 1e-13,
-		     index_t sample = -1)
-	: gsFitting<T>(params, points, basis), m_zero(zero), m_sample(sample)
+		     index_t sample = -1,
+		     gsErrType errType = gsErrType::l2)
+	: gsFitting<T>(params, points, basis), m_zero(zero), m_sample(sample), m_errType(errType)
     {
 	// Note: Forgetting the <T> leads to a confusing error message.
 	index_t uNpts = math::sqrt(params.cols());
@@ -123,7 +127,7 @@ public:
 
     inline void exportMaxErr(const std::string& filename) const
     {
-	gsWriteGnuplot(m_MaxErr, filename);
+	gsWriteGnuplot(m_maxErr, filename);
     }
 
     inline void exportDecompErr(const std::string& filename) const
@@ -149,7 +153,7 @@ public:
 
     inline const std::vector<T>& getMaxErr() const
     {
-	return m_MaxErr;
+	return m_maxErr;
     }
 
     void testMN(index_t rows) const
@@ -185,7 +189,7 @@ protected:
 
     gsMatrix<T> m_P, m_Q; // The matrices P and Q from the paper.
 
-    std::vector<T> m_l2Err, m_L2Err, m_MaxErr, m_decompErr;
+    std::vector<T> m_l2Err, m_L2Err, m_maxErr, m_decompErr;
 
     index_t m_rank;
 
@@ -196,6 +200,7 @@ protected:
     /// Special value -1 means do not compute the L^2-norm at all.
     index_t m_sample;
 
+    gsErrType m_errType;
 };
 
 } // namespace gismo

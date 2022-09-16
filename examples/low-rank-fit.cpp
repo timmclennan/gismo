@@ -466,6 +466,40 @@ void sampleDataMeshVertices(gsMatrix<T>& params,
     }
 }
 
+template <class T>
+void sampleDataUniform(const gsGeometry<T>& geometry,
+		       index_t uNum, index_t vNum,
+		       gsMatrix<T>& params, gsMatrix<T>& points)
+{
+  gsVector<T> uPar = sampleUniform(uNum, T(0), T(1));
+  gsVector<T> vPar = sampleUniform(vNum, T(0), T(1));
+
+  // TODO: The following should be sampleData.
+    index_t numSamples = uNum * vNum;
+
+    params.resize(2, numSamples);
+    //points.resize(3, numSamples);
+
+    for(index_t i=0; i<uNum; i++)
+    {
+	for(index_t j=0; j<vNum; j++)
+	{
+	    index_t glob = j * vNum + i;
+	    T u = uPar(i);
+	    T v = vPar(j);
+
+	    params(0, glob) = u;
+	    params(1, glob) = v;
+
+	}
+    }
+
+    // gsInfo << "params:\n" << params << std::endl;
+    // gsInfo << "points:\n" << points << std::endl;
+
+    geometry.eval_into(params, points);
+}
+
 real_t stdFit(const gsMatrix<real_t>& params,
 	      const gsMatrix<real_t>& points,
 	      index_t numKnots,
@@ -1549,9 +1583,71 @@ void example_14(index_t sample, index_t deg, index_t numSamples, real_t epsAcc, 
     gnuplot_14(stdl2Err, totDOF, lowCost, lowl2Err, epsAcc);
 }
 
+/// Extends \a vector by repeatedly appending its last element until
+/// its size equals \a newsize.
+void extendWithLast(std::vector<real_t> vector, size_t newSize)
+{
+    real_t last = vector.back();
+    for(size_t i=vector.size(); i<newSize; i++)
+	vector.push_back(last);
+}
+
+void gnuplot_15(const std::vector<real_t> xErr,
+		const std::vector<real_t> yErr,
+		const std::vector<real_t> zErr)
+{
+    // The three error vectors can be of different sizes.
+    size_t maxSize = std::max(xErr.size(), std::max(yErr.size(), zErr.size()));
+    extendWithLast(xErr, maxSize);
+    extendWithLast(yErr, maxSize);
+    extendWithLast(zErr, maxSize);
+
+    std::vector<real_t> err(maxSize);
+    for(size_t i=0; i<maxSize; i++)
+    	err[i] = math::sqrt(xErr[i] * xErr[i] + yErr[i] * yErr[i] + zErr[i] * zErr[i]);
+
+    gsWriteGnuplot(err, "example-15-x.dat");
+    gsWriteGnuplot(err, "example-15-y.dat");
+    gsWriteGnuplot(err, "example-15-z.dat");
+    gsWriteGnuplot(err, "example-15.dat");	
+}
+
+void example_15(index_t deg, index_t numSamples, index_t numDOF, real_t epsAcc, real_t epsAbort, bool pivot)
+{
+    index_t numKnots = numDOF - deg - 1;
+    real_t tMin(0), tMax(1);
+    gsErrType errType = gsErrType::max;
+    index_t sample = -1; // We don't compute the L2-error.
+    real_t zero = 1e-13;
+
+    gsFileData<> fd("/ya/ya108/ya10813/w/gismo/low-rank/release/tmtf-one-surf.xml");
+    gsTensorBSpline<2>::uPtr spline = fd.getFirst<gsTensorBSpline<2>>();
+
+    gsMatrix<real_t> params, points;
+    sampleDataUniform<real_t>(*spline, numSamples, numSamples, params, points);
+    std::vector<std::vector<real_t>> maxErrs;
+
+    gsKnotVector<real_t> knots(tMin, tMax, numKnots, deg+1);
+    gsTensorBSplineBasis<2, real_t> basis(knots, knots);
+    gsMatrix<real_t> coefs(basis.size(), 3);
+    for(index_t i=0; i<3; i++)
+    {
+	gsLowRankFitting<real_t> lowRankFitting(params, points.row(i), basis, zero, sample, errType);
+	lowRankFitting.computeCrossWithStop(epsAcc, epsAbort, pivot);
+	coefs.col(i) = lowRankFitting.result()->coefs();
+	maxErrs.push_back(lowRankFitting.getMaxErr());
+
+	gsInfo << "std: " << stdFit(params, points.row(i), numKnots, deg, -1, tMin, tMax) << std::endl;
+    }
+
+    gnuplot_15(maxErrs[0], maxErrs[1], maxErrs[2]);
+    //gsWriteParaview(gsTensorBSpline<2>(basis, coefs), "result");
+}
+
 int main(int argc, char *argv[])
 {
     index_t numSamples = 100;
+    index_t numDOF = 50;
     index_t deg = 3;
     index_t sample = 6;
     index_t example = 11;
@@ -1564,7 +1660,8 @@ int main(int argc, char *argv[])
     bool pivot = false;
 
     gsCmdLine cmd("Choose the example and its parameters.");
-    cmd.addInt("m", "samples", "number of samples", numSamples);
+    cmd.addInt("m", "samples", "number of samples in each direction", numSamples);
+    cmd.addInt("n", "dofs", "number of degrees of freedom in each direction", numDOF);
     cmd.addInt("d", "deg", "degree of approximation", deg);
     cmd.addInt("s", "sample", "id of the input function", sample);
     cmd.addInt("e", "example", "which example to compute", example);
@@ -1625,6 +1722,9 @@ int main(int argc, char *argv[])
 	break;
     case 14:
 	example_14(sample, deg, numSamples, epsAcc, epsAbort);
+	break;
+    case 15:
+	example_15(deg, numSamples, numDOF, epsAcc, epsAbort, pivot);
 	break;
     default:
 	gsWarn << "Unknown example, exiting." << std::endl;
