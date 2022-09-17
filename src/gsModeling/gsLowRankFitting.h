@@ -82,6 +82,7 @@ public:
 	    m_uNpts = math::sqrt(params.cols());
 
 	index_t vNpts = params.cols() / m_uNpts;
+	GISMO_ASSERT(m_uNpts * vNpts == params.cols(), "uNum and vNum not really matching");
 	initPQ(matrixUtils::identity<T>(m_uNpts),
 	       matrixUtils::identity<T>(  vNpts));
     }

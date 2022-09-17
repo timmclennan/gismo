@@ -111,6 +111,12 @@ void gsLowRankFitting<T>::initPQ(const gsMatrix<T>& uWeights, const gsMatrix<T>&
     m_X = gsMatrix<T>(Xs.transpose());
     m_Y = gsMatrix<T>(Ys.transpose());
 
+    GISMO_ASSERT(m_X.cols() == uWeights.rows(), "Cannot compute X * U due to size mismatch.");
+    GISMO_ASSERT(uWeights.cols() == m_X.cols(), "Cannot compute U * X^T due to size mismatch.");
+
+    GISMO_ASSERT(m_Y.cols() == vWeights.rows(), "Cannot compute Y * V due to size mismatch.");
+    GISMO_ASSERT(vWeights.cols() == m_Y.cols(), "Cannot compute V * Y^T due to size mismatch.");
+
     m_P = (m_X * uWeights * m_X.transpose()).inverse() * m_X * uWeights;
     m_Q = (m_Y * vWeights * m_Y.transpose()).inverse() * m_Y * vWeights;
 }

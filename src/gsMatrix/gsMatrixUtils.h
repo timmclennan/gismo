@@ -141,6 +141,18 @@ namespace gismo
 	    mat(newDiag, newDiag) = num;
 	}
 
+	template <class T>
+	void printSize(const std::string& name, const gsMatrix<T>& mat)
+	{
+	    gsInfo << name << ": (" << mat.rows() << "x" << mat.cols() << ")" << std::endl;
+	}
+	template <class T>
+	void print(const std::string& name, const gsMatrix<T>& mat)
+	{
+	    printSize(name, mat);
+	    gsInfo << mat << std::endl;
+	}
+
     } // namespace matrixUtils
 
 } // namespace gismo

@@ -564,7 +564,7 @@ real_t stdFit(const gsMatrix<real_t>& params,
 	      real_t maxU = 1.0)
 {
     gsKnotVector<real_t> uKnots(minU, maxU, uNumKnots, deg+1);
-    gsKnotVector<real_t> vKnots(minU, maxU, uNumKnots, deg+1);
+    gsKnotVector<real_t> vKnots(minU, maxU, vNumKnots, deg+1);
     gsTensorBSplineBasis<2, real_t> basis(uKnots, vKnots);
     
     gsFitting<real_t> fitting(params, points, basis);
@@ -572,6 +572,7 @@ real_t stdFit(const gsMatrix<real_t>& params,
     fitting.computeErrors();
     //gsWriteParaview(*fitting.result(), "fitting", 10000, false, true);
     return fitting.get_l2Error();
+    //return fitting.maxPointError();
 }
 
 void lowSVDFit(const gsMatrix<real_t>& params,
@@ -1633,16 +1634,16 @@ void example_14(index_t sample, index_t deg, index_t numSamples, real_t epsAcc, 
 
 /// Extends \a vector by repeatedly appending its last element until
 /// its size equals \a newsize.
-void extendWithLast(std::vector<real_t> vector, size_t newSize)
+void extendWithLast(std::vector<real_t>& vector, size_t newSize)
 {
     real_t last = vector.back();
     for(size_t i=vector.size(); i<newSize; i++)
 	vector.push_back(last);
 }
 
-void gnuplot_15(const std::vector<real_t> xErr,
-		const std::vector<real_t> yErr,
-		const std::vector<real_t> zErr)
+void gnuplot_15(std::vector<real_t> xErr,
+		std::vector<real_t> yErr,
+		std::vector<real_t> zErr)
 {
     // The three error vectors can be of different sizes.
     size_t maxSize = std::max(xErr.size(), std::max(yErr.size(), zErr.size()));
@@ -1660,34 +1661,46 @@ void gnuplot_15(const std::vector<real_t> xErr,
     gsWriteGnuplot(err, "example-15.dat");	
 }
 
+/**
+   \a sample has different meaning in this example:
+   0 -> sample points from tmtf-one-surf.xml uniformly;
+   1 -> sample points from tmtf-one-surf.xml in Greville abscissae;
+   2 -> load points from tmtf-input.xml
+
+   When loading the points, then the parameter matrix has to have the following form
+   (u0, ..., un, u0, ..., un, ..., u0, ..., un)
+   (v0, ..., v0, v1, ..., v1, ..., vn, ..., vn)
+   Otherwise partitioning into parameters is likely to lead to strange behaviour.
+ */
 void example_15(index_t deg,
 		index_t uNumSamples, index_t vNumSamples,
 		index_t uNumDOF, index_t vNumDOF,
-		real_t epsAcc, real_t epsAbort, bool pivot, bool gre)
+		real_t epsAcc, real_t epsAbort, bool pivot, index_t sample)
 {
     index_t uNumKnots = uNumDOF - deg - 1;
     index_t vNumKnots = vNumDOF - deg - 1;
     real_t tMin(0), tMax(1);
     gsErrType errType = gsErrType::max;
-    index_t sample = -1; // We don't compute the L2-error.
+    index_t dummy = -1; // We don't compute the L2-error.
     real_t zero = 1e-13;
 
-    gsFileData<> fd1("crescendo/tmtf-one-surf.xml");
-    gsTensorBSpline<2>::uPtr spline = fd1.getFirst<gsTensorBSpline<2>>();
-
     gsMatrix<real_t> params, points;
-    if(gre)
-    	sampleDataGre<real_t>(uNumSamples, vNumSamples, params, points, *spline);
-    else
-    	sampleDataUniform<real_t>(*spline, uNumSamples, vNumSamples, params, points);
-    gsInfo << "params: (" << params.rows() << "x" << params.cols() << ")" << std::endl; 
-    gsInfo << "points: (" << points.rows() << "x" << points.cols() << ")" << std::endl; 
 
-    gsFileData<> fd2("crescendo/tmtf-input.xml");
-    fd2.getId<gsMatrix<>>(0, params);
-    fd2.getId<gsMatrix<>>(1, points);
-    gsInfo << "params: (" << params.rows() << "x" << params.cols() << ")" << std::endl; 
-    gsInfo << "points: (" << points.rows() << "x" << points.cols() << ")" << std::endl; 
+    if(sample == 0 || sample == 1)
+    {
+	gsFileData<> fd1("crescendo/tmtf-one-surf.xml");
+	gsTensorBSpline<2>::uPtr spline = fd1.getFirst<gsTensorBSpline<2>>();
+	if(sample == 0)
+	    sampleDataUniform<real_t>(*spline, uNumSamples, vNumSamples, params, points);
+	else
+	    sampleDataGre<real_t>(uNumSamples, vNumSamples, params, points, *spline);
+    }
+    else
+    {
+	gsFileData<> fd2("crescendo/tmtf-input.xml");
+	fd2.getId<gsMatrix<>>(0, params);
+	fd2.getId<gsMatrix<>>(1, points);
+    }
     
     std::vector<std::vector<real_t>> maxErrs;
 
@@ -1697,12 +1710,12 @@ void example_15(index_t deg,
     gsMatrix<real_t> coefs(basis.size(), 3);
     for(index_t i=0; i<3; i++)
     {
-	gsLowRankFitting<real_t> lowRankFitting(params, points.row(i), basis, zero, sample, errType, uNumSamples);
+	gsLowRankFitting<real_t> lowRankFitting(params, points.row(i), basis, zero, dummy, errType, uNumSamples);
 	lowRankFitting.computeCrossWithStop(epsAcc, epsAbort, pivot);
 	coefs.col(i) = lowRankFitting.result()->coefs();
 	maxErrs.push_back(lowRankFitting.getMaxErr());
 
-	gsInfo << "std: " << stdFit(params, points.row(i), uNumKnots, vNumKnots, deg, -1, tMin, tMax) << std::endl;
+	gsInfo << "std: " << stdFit(params, points.row(i), uNumKnots, vNumKnots, deg, dummy, tMin, tMax) << std::endl;
     }
 
     gnuplot_15(maxErrs[0], maxErrs[1], maxErrs[2]);
@@ -1727,7 +1740,6 @@ int main(int argc, char *argv[])
     real_t quA = 1;
 
     bool pivot = false;
-    bool gre = false;
 
     gsCmdLine cmd("Choose the example and its parameters.");
     cmd.addInt("m", "samples", "number of samples in each direction", numSamples);
@@ -1740,7 +1752,6 @@ int main(int argc, char *argv[])
     cmd.addReal("t", "tol", "epsilon accept for Algorithm 1", epsAcc);
     cmd.addReal("q", "quA", "quA in the quadrature rule", quA);
     cmd.addSwitch("p", "piv", "whether to use pivoting in ACA", pivot);
-    cmd.addSwitch("g", "gre", "whether to use Greville abscissae instead of uniform sampling", gre);
     cmd.addInt("b", "usamples", "number of samples in the u-direction", uNumSamples);
     cmd.addInt("c", "vsamples", "number of samples in the v-direction", vNumSamples);
     cmd.addInt("f", "udof", "number of DOF in the u-direction", uNumDOF);
@@ -1799,7 +1810,7 @@ int main(int argc, char *argv[])
 	example_14(sample, deg, numSamples, epsAcc, epsAbort);
 	break;
     case 15:
-	example_15(deg, uNumSamples, vNumSamples, uNumDOF, vNumDOF, epsAcc, epsAbort, pivot, gre);
+	example_15(deg, uNumSamples, vNumSamples, uNumDOF, vNumDOF, epsAcc, epsAbort, pivot, sample);
 	break;
     default:
 	gsWarn << "Unknown example, exiting." << std::endl;
