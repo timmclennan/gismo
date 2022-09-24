@@ -1238,7 +1238,7 @@ void setDomain(index_t sample, real_t &tMin, real_t &tMax)
 	tMin = -1;
 	tMax = 1;
     }
-    else if(sample == 5)
+    else if(sample == 5 || sample == 8)
     {
 	tMin = 0;
 	tMax = 2;
@@ -1753,11 +1753,11 @@ void gnuplot_16(const std::string& what)
     gnuplotWriteLabels(fout, "rank", "l2-error");
 
     fout << "plot 'example-16-pivot-" << what << ".dat' index 0 with linespoints"
-	 << " linestyle 1 pointtype 1 title 'ACA with pivoting',\\\n"
+	 << " linestyle 1 pointsize 0 title 'ACA with pivoting',\\\n"
 	 << "'example-16-full-"       << what << ".dat' index 0 with linespoints"
-	 << " linestyle 2 pointtype 2 title 'ACA without pivoting',\\\n"
+	 << " linestyle 2 pointsize 0 title 'ACA without pivoting',\\\n"
 	 << "'example-16-svd-"        << what << ".dat' index 0 with linespoints"
-	 << " linestyle 3 pointtype 3 title 'SVD'";
+	 << " linestyle 3 pointsize 0 title 'SVD'";
 
     fout.close();
 }
