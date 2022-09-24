@@ -124,7 +124,8 @@ void gsLowRankFitting<T>::initPQ(const gsMatrix<T>& uWeights, const gsMatrix<T>&
 template <class T>
 void gsLowRankFitting<T>::computeSVD(index_t maxIter, index_t sample, const std::string& filename)
 {
-    
+    clearErrors();
+
     gsBSplineBasis<T> uBasis = *(static_cast<gsBSplineBasis<T>*>(&(this->m_basis->component(0))));
     gsBSplineBasis<T> vBasis = *(static_cast<gsBSplineBasis<T>*>(&(this->m_basis->component(1))));
 
@@ -142,9 +143,7 @@ void gsLowRankFitting<T>::computeSVD(index_t maxIter, index_t sample, const std:
     //gsInfo << "Rank: " << pointSVD.rank() << std::endl;
 
     // 2. Iterate.
-    std::vector<T> LIErr;
-    std::vector<T> L2Err;
-    std::vector<T> dofs;
+    std::vector<T> LIErr, L2Err, l2Err, dofs;
     for(index_t r=0; r<pointSVD.rank() && r<maxIter; r++)
     {
 	// 2.0. Fit u with the u-basis.
@@ -165,16 +164,21 @@ void gsLowRankFitting<T>::computeSVD(index_t maxIter, index_t sample, const std:
 	this->m_result = this->m_basis->makeGeometry(give(convertBack(coefs).transpose())).release();
 	this->computeErrors();
 	T maxErr = this->maxPointError();
-	gsInfo << "err SVD: " << maxErr << std::endl;
-	LIErr.push_back(maxErr);
-	L2Err.push_back(L2Error(*static_cast<gsTensorBSpline<2, T>*>(this->result()), sample));
+	//gsInfo << "err SVD: " << maxErr << std::endl;
+	m_maxErr.push_back(maxErr);
+	// optional and a bit costly:
+	//m_L2Err.push_back(L2Error(*static_cast<gsTensorBSpline<2, T>*>(this->result()), sample));
 	dofs.push_back((r+1) * uCoefs.size() * vCoefs.size());
+
+	m_l2Err.push_back(this->get_l2Error());
+	m_decompErr.push_back(pointSVD.l2decompErr(r+1));
     }
 
     // 3. Make a convergence graph.
-    gsWriteGnuplot(LIErr, filename + "svd_max.dat");
-    gsWriteGnuplot(L2Err, filename + "svd_L2.dat");
-    //gsWriteGnuplot(dofs, L2Err, "svdL2.dat");
+    // gsWriteGnuplot(LIErr, filename + "svd_max.dat");
+    // gsWriteGnuplot(L2Err, filename + "svd_L2.dat");
+    // gsWriteGnuplot(dofs, L2Err, "svdL2.dat");
+    // gsWriteGnuplot(l2Err, filename + "-svd_l2.dat");
 }
 
 template <class T>
@@ -1038,6 +1042,7 @@ int gsLowRankFitting<T>::computeCrossWithStop(T epsAccept, T epsAbort, bool pivo
     // gsSvd<T> pointSVD(ptsMN);
     // gsInfo << "SVD rank: " << pointSVD.rank() << std::endl;
 
+    clearErrors();
     index_t result = -1;
     for(index_t i=0; i<tTmp.cols(); i++)
     //for(index_t i=0; i<pointSVD.rank(); i++)

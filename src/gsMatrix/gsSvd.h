@@ -25,6 +25,7 @@ class gsSvd
 {
 public:
     gsSvd(const gsMatrix<T>& mat)
+	: m_Z(mat)
     {
 	Eigen::JacobiSVD< Eigen::Matrix<real_t, Dynamic, Dynamic> > svd(mat, Eigen::ComputeFullU | Eigen::ComputeFullV);
 	m_U = svd.matrixU();
@@ -69,6 +70,18 @@ public:
 	return m_rank;
     }
 
+    /// Returns the rank-\a rank approximation of the input matrix as \a result.
+    void lowRankApprox(gsMatrix<T>& result, index_t rank)
+    {
+	result.resize(m_U.rows(), m_V.cols());
+	result.setZero();
+
+	for(index_t i=0; i<rank; i++)
+	{
+	    result += s(i) * matrixUtils::tensorProduct(u(i), v(i));
+	}
+    }
+
     bool sanityCheck(const gsMatrix<T> test)
     {
 	if(m_U.rows() != test.rows())
@@ -83,13 +96,8 @@ public:
 	    return false;
 	}
 		
-	gsMatrix<T> result(m_U.rows(), m_V.cols());
-	result.setZero();
-
-	for(index_t i=0; i<m_S.rows(); i++)
-	{
-	    result += s(i) * matrixUtils::tensorProduct(u(i), v(i));
-	}
+	gsMatrix<T> result;
+	lowRankApprox(result, m_S.rows());
 	gsInfo << "Input:\n" << test << "\nCheck:\n" << result << std::endl;
 
 	for(index_t i=0; i<result.rows(); i++)
@@ -104,8 +112,22 @@ public:
 	return true;
     }
 
- protected:
+    T l2decompErr(size_t rank)
+    {
+	gsMatrix<T> result;
+	lowRankApprox(result, rank);
+	return (m_Z - result).norm();
+    }
+
+protected:
+
+    /// the input matrix
+    gsMatrix<T> m_Z;
+
+    /// the decomposition matrices
     gsMatrix<T> m_U, m_S, m_V;
+
+    /// svd-rank
     index_t m_rank;
 };
 

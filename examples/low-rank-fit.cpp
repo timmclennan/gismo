@@ -1418,6 +1418,24 @@ void gnuplotWriteColourArray(std::ofstream& fout, size_t size)
     fout << std::endl;
 }
 
+void gnuplotWriteLinestyles(std::ofstream& fout, size_t size)
+{
+    fout << "do for [i=1:" << size << "] {\n"
+	 << "    set style line i linetype i linewidth 2"
+	 << " lc rgb Rgb[i]\n"
+	 << "}\n";
+    fout << std::endl;
+}
+
+void gnuplotWriteLabels(std::ofstream& fout, std::string xlabel, std::string ylabel)
+{
+    fout << "set log y\n";
+    fout << "set format y \"10^{%L}\"\n";
+    fout << "set xlabel \"" << xlabel << "\"\n";
+    fout << "set ylabel \"" << ylabel << "\"\n";
+    fout << std::endl;
+}
+
 void gnuplot_13(const std::vector<index_t> numsDOF,
 		const std::vector<std::vector<real_t>>& errsL2Int,
 		const std::vector<std::vector<real_t>>& errsL2Gre,
@@ -1535,18 +1553,8 @@ void gnuplot_14(const std::vector<real_t> stdErrs,
     std::ofstream fout;
     fout.open(filename);
     gnuplotWriteColourArray(fout, size);
-
-    fout << "do for [i=1:" << size << "] {\n"
-	 << "    set style line i linetype i linewidth 2"
-	 << " lc rgb Rgb[i]\n"
-	 << "}\n";
-    fout << std::endl;
-
-    fout << "set log y\n";
-    fout << "set format y \"10^{%L}\"\n";
-    fout << "set xlabel \"rank\"\n";
-    fout << "set ylabel \"l2-error\"\n";
-    fout << std::endl;
+    gnuplotWriteLinestyles(fout, size);
+    gnuplotWriteLabels(fout, "rank", "l2-error");
 
     fout << "tol(p) = " << tol << "\n";
     for(size_t i=0; i<size; i++)
@@ -1722,6 +1730,81 @@ void example_15(index_t deg,
     gsWriteParaview(gsTensorBSpline<2>(basis, coefs), "result", 10000, false, true);
 }
 
+void printMessage(index_t message)
+{
+    if(message == 0)
+	gsInfo << "success";
+    else if(message == 1)
+	gsInfo << "cannot converge";
+    else
+	gsInfo << "max iter reached";
+    gsInfo << std::endl;
+}
+
+void gnuplot_16(const std::string& what)
+{
+    const std::string filename("example-16-" + what + ".gnu");
+    size_t size = 3;
+
+    std::ofstream fout;
+    fout.open(filename);
+    gnuplotWriteColourArray(fout, size);
+    gnuplotWriteLinestyles(fout, size);
+    gnuplotWriteLabels(fout, "rank", "l2-error");
+
+    fout << "plot 'example-16-pivot-" << what << ".dat' index 0 with linespoints"
+	 << " linestyle 1 pointtype 1 title 'ACA with pivoting',\\\n"
+	 << "'example-16-full-"       << what << ".dat' index 0 with linespoints"
+	 << " linestyle 2 pointtype 2 title 'ACA without pivoting',\\\n"
+	 << "'example-16-svd-"        << what << ".dat' index 0 with linespoints"
+	 << " linestyle 3 pointtype 3 title 'SVD'";
+
+    fout.close();
+}
+
+/**
+   Testing the influence of the decomposition method.
+ */
+void example_16(index_t sample, index_t deg, index_t numSamples, index_t numDOF,
+		real_t epsAcc, real_t epsAbort)
+{
+    real_t tMin, tMax;
+    setDomain(sample, tMin, tMax);
+
+    gsMatrix<real_t> params, points;
+    sampleData(numSamples, params, points, sample, tMin, tMax);
+    std::vector<real_t> stdl2Err, lowl2Err;
+
+    index_t numKnots = numDOF - deg - 1;
+    gsKnotVector<real_t> knots(tMin, tMax, numKnots, deg+1);
+    gsTensorBSplineBasis<2, real_t> basis(knots, knots);
+
+    gsLowRankFitting<real_t> lowRankFitting(params, points, basis);
+
+    gsInfo << "Pivoting ACA\n";
+    index_t message = lowRankFitting.computeCrossWithStop(epsAcc, epsAbort, true);
+    printMessage(message);
+    lowRankFitting.exportl2Err(    "example-16-pivot-l2.dat");
+    lowRankFitting.exportDecompErr("example-16-pivot-decomp.dat");
+
+    gsInfo << "Full ACA\n";
+    message = lowRankFitting.computeCrossWithStop(epsAcc, epsAbort, false);
+    printMessage(message);
+    lowRankFitting.exportl2Err(    "example-16-full-l2.dat");
+    lowRankFitting.exportDecompErr("example-16-full-decomp.dat");
+
+    gsInfo << "SVD\n";
+    lowRankFitting.computeSVD(200, sample, "example-16");
+    lowRankFitting.exportl2Err(    "example-16-svd-l2.dat");
+    lowRankFitting.exportDecompErr("example-16-svd-decomp.dat");
+
+    real_t std = stdFit(params, points, numKnots, deg, sample, tMin, tMax);
+    gsInfo << "std: " << std  << " with " << numDOF << " DOF" << std::endl;
+
+    gnuplot_16("l2");
+    gnuplot_16("decomp");
+}
+
 int main(int argc, char *argv[])
 {
     index_t numSamples = 100;
@@ -1811,6 +1894,9 @@ int main(int argc, char *argv[])
 	break;
     case 15:
 	example_15(deg, uNumSamples, vNumSamples, uNumDOF, vNumDOF, epsAcc, epsAbort, pivot, sample);
+	break;
+    case 16:
+	example_16(sample, deg, numSamples, numDOF, epsAcc, epsAbort);
 	break;
     default:
 	gsWarn << "Unknown example, exiting." << std::endl;

@@ -197,6 +197,14 @@ protected:
 
     void initPQ(const gsMatrix<T>& uWeights, const gsMatrix<T>& vWeights);
 
+    void clearErrors()
+    {
+	m_l2Err.clear();
+	m_maxErr.clear();
+	m_L2Err.clear();
+	m_decompErr.clear();
+    }
+
 protected:
 
     gsMatrix<T> m_X, m_Y; // Transposed(!) collocation matrices.
