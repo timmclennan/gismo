@@ -560,11 +560,13 @@ real_t stdFit(const gsMatrix<real_t>& params,
 	      index_t vNumKnots,
 	      index_t deg,
 	      index_t sample,
-	      real_t minU = 0.0,
-	      real_t maxU = 1.0)
+	      real_t uMin = 0.0,
+	      real_t uMax = 1.0,
+	      real_t vMin = 0.0,
+	      real_t vMax = 1.0)
 {
-    gsKnotVector<real_t> uKnots(minU, maxU, uNumKnots, deg+1);
-    gsKnotVector<real_t> vKnots(minU, maxU, vNumKnots, deg+1);
+    gsKnotVector<real_t> uKnots(uMin, uMax, uNumKnots, deg+1);
+    gsKnotVector<real_t> vKnots(vMin, vMax, vNumKnots, deg+1);
     gsTensorBSplineBasis<2, real_t> basis(uKnots, vKnots);
     
     gsFitting<real_t> fitting(params, points, basis);
@@ -1675,10 +1677,10 @@ void gnuplot_15(std::vector<real_t> xErr,
    1 -> sample points from tmtf-one-surf.xml in Greville abscissae;
    2 -> load points from tmtf-input.xml
 
-   When loading the points, then the parameter matrix has to have the following form
+   When loading the points, then the parameter matrix has to have the form
    (u0, ..., un, u0, ..., un, ..., u0, ..., un)
-   (v0, ..., v0, v1, ..., v1, ..., vn, ..., vn)
-   Otherwise partitioning into parameters is likely to lead to strange behaviour.
+   (v0, ..., v0, v1, ..., v1, ..., vn, ..., vn),
+   otherwise partitioning into parameters is likely to lead to strange behaviour.
  */
 void example_15(index_t deg,
 		index_t uNumSamples, index_t vNumSamples,
@@ -1687,7 +1689,7 @@ void example_15(index_t deg,
 {
     index_t uNumKnots = uNumDOF - deg - 1;
     index_t vNumKnots = vNumDOF - deg - 1;
-    real_t tMin(0), tMax(1);
+    real_t uMin(0.0), uMax(1.0), vMin(0.0), vMax(1.0);
     gsErrType errType = gsErrType::max;
     index_t dummy = -1; // We don't compute the L2-error.
     real_t zero = 1e-13;
@@ -1712,8 +1714,8 @@ void example_15(index_t deg,
     
     std::vector<std::vector<real_t>> maxErrs;
 
-    gsKnotVector<real_t> uKnots(tMin, tMax, uNumKnots, deg+1);
-    gsKnotVector<real_t> vKnots(tMin, tMax, vNumKnots, deg+1);
+    gsKnotVector<real_t> uKnots(uMin, uMax, uNumKnots, deg+1);
+    gsKnotVector<real_t> vKnots(vMin, vMax, vNumKnots, deg+1);
     gsTensorBSplineBasis<2, real_t> basis(uKnots, vKnots);
     gsMatrix<real_t> coefs(basis.size(), 3);
     for(index_t i=0; i<3; i++)
@@ -1723,7 +1725,9 @@ void example_15(index_t deg,
 	coefs.col(i) = lowRankFitting.result()->coefs();
 	maxErrs.push_back(lowRankFitting.getMaxErr());
 
-	gsInfo << "std: " << stdFit(params, points.row(i), uNumKnots, vNumKnots, deg, dummy, tMin, tMax) << std::endl;
+	gsInfo << "std: "
+	       << stdFit(params, points.row(i), uNumKnots, vNumKnots, deg, dummy, uMin, uMax, vMin, vMax)
+	       << std::endl;
     }
 
     gnuplot_15(maxErrs[0], maxErrs[1], maxErrs[2]);
