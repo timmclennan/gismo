@@ -110,7 +110,7 @@ public:
 
     void computeCrossWithRefAndStop(T tol, bool pivot);
 
-    int computeCrossWithStop(T epsAccept, T epsAbort, bool pivot = true);
+    int computeCrossWithStop(T epsAccept, T epsAbort, bool pivot = true, bool verbose = true);
 
     T methodB(bool printErr);
 

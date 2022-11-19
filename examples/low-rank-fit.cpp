@@ -1328,7 +1328,7 @@ void example_11(index_t sample, index_t deg, index_t numSamples, real_t epsAcc, 
 }
 
 void example_12(index_t sample, index_t deg, index_t numSamples, real_t epsAcc, real_t epsAbort,
-		bool pivot)
+		bool pivot, bool verbose)
 {
     real_t tMin, tMax;
     setDomain(sample, tMin, tMax);
@@ -1342,28 +1342,45 @@ void example_12(index_t sample, index_t deg, index_t numSamples, real_t epsAcc, 
     gsTensorBSplineBasis<2, real_t> basis(knots, knots);
 
     std::vector<real_t> totDOF, stdCost, lowCost;
-    gsInfo << "pivoting: " << pivot << std::endl;
+
+    if(verbose)
+    {
+	gsInfo << "pivoting: " << pivot << std::endl;
+    }
+
     real_t zero = pivot ? 1e-12 : 4e-13;
     do
     {
+	gsInfo << "==========================================" << std::endl;
+	index_t numDOF = basis.size(0);
+	index_t numKnots = numDOF - deg - 1;
+
+	// Compute the error using standard method first.
+	gsStopwatch timeStd, timeApp;
+	timeStd.restart();
+	real_t std = stdFit(params, points, numKnots, deg, sample, tMin, tMax);
+	timeStd.stop();
+	stdl2Err.push_back(std);
+	stdCost.push_back(math::sqrt(params.cols()) + numDOF);
+
 	totDOF.push_back(basis.size());
 	gsLowRankFitting<real_t> lowRankFitting(params, points, basis, zero);
-	index_t message = lowRankFitting.computeCrossWithStop(epsAcc, epsAbort, pivot);
+	timeApp.restart();
+	index_t message = lowRankFitting.computeCrossWithStop(1.01 * std, epsAbort, pivot, verbose);
+	timeApp.stop();
+
 	if(message == 0)
 	    gsInfo << "success";
 	else if(message == 1)
 	    gsInfo << "cannot converge";
 	else
 	    gsInfo << "max iter reached";
-	gsInfo << std::endl;
+	gsInfo << " in " << timeApp.elapsed() << "s." << std::endl;
+	gsInfo << "std: " << std  << " with " << numDOF << " DOF "
+	       << " in " << timeStd.elapsed() << "s." << std::endl;
 	lowCost.push_back(2 * lowRankFitting.getRank());
 
-	index_t numDOF = basis.size(0);
-	index_t numKnots = numDOF - deg - 1;
-	real_t std = stdFit(params, points, numKnots, deg, sample, tMin, tMax);
-	gsInfo << "std: " << std  << " with " << numDOF << " DOF" << std::endl;
-	stdl2Err.push_back(std);
-	stdCost.push_back(math::sqrt(params.cols()) + numDOF);
+
 
 	std::string filename("example-12-" + std::to_string(numDOF));
 	lowRankFitting.exportl2Err(filename + "-l2.dat");
@@ -1381,6 +1398,7 @@ void example_12(index_t sample, index_t deg, index_t numSamples, real_t epsAcc, 
     for(auto it=stdCost.begin(); it!=stdCost.end(); ++it)
 	stdTotCost += *it;
 
+    gsInfo << "==========================================" << std::endl;
     gsInfo << "total low cost: " << lowTotCost << ", total std cost: " << stdTotCost << std::endl;
 }
 
@@ -1823,6 +1841,7 @@ int main(int argc, char *argv[])
     real_t quA = 1;
 
     bool pivot = false;
+    bool verbose = false;
 
     gsCmdLine cmd("Choose the example and its parameters.");
     cmd.addInt("m", "samples", "number of samples in each direction", numSamples);
@@ -1834,7 +1853,8 @@ int main(int argc, char *argv[])
     cmd.addReal("a", "abort", "epsilon abort for Algorithm 1", epsAbort);
     cmd.addReal("t", "tol", "epsilon accept for Algorithm 1", epsAcc);
     cmd.addReal("q", "quA", "quA in the quadrature rule", quA);
-    cmd.addSwitch("p", "piv", "whether to use pivoting in ACA", pivot);
+    cmd.addSwitch("p", "piv", "activate ACA pivoting", pivot);
+    cmd.addSwitch("v", "verbose", "write a lot of messages", verbose);
     cmd.addInt("b", "usamples", "number of samples in the u-direction", uNumSamples);
     cmd.addInt("c", "vsamples", "number of samples in the v-direction", vNumSamples);
     cmd.addInt("f", "udof", "number of DOF in the u-direction", uNumDOF);
@@ -1884,7 +1904,7 @@ int main(int argc, char *argv[])
 	example_11(sample, deg, numSamples, epsAcc, epsAbort);
 	break;
     case 12:
-	example_12(sample, deg, numSamples, epsAcc, epsAbort, pivot);
+	example_12(sample, deg, numSamples, epsAcc, epsAbort, pivot, verbose);
 	break;
     case 13:
 	example_13(sample, deg, numSamples, epsAcc, epsAbort, quA, quB);
