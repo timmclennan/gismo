@@ -122,7 +122,7 @@ void gsLowRankFitting<T>::initPQ(const gsMatrix<T>& uWeights, const gsMatrix<T>&
 }
 
 template <class T>
-void gsLowRankFitting<T>::computeSVD(index_t maxIter, index_t sample, const std::string& filename)
+void gsLowRankFitting<T>::computeSVD(index_t sample, const std::string& filename)
 {
     clearErrors();
 
@@ -144,7 +144,7 @@ void gsLowRankFitting<T>::computeSVD(index_t maxIter, index_t sample, const std:
 
     // 2. Iterate.
     std::vector<T> LIErr, L2Err, l2Err, dofs;
-    for(index_t r=0; r<pointSVD.rank() && r<maxIter; r++)
+    for(index_t r=0; r<pointSVD.rank(); r++)
     {
 	// 2.0. Fit u with the u-basis.
 	gsFitting<T> uFitting(uPar, pointSVD.u(r).transpose(), uBasis);
@@ -898,7 +898,7 @@ int gsLowRankFitting<T>::computeCrossWithStop(T epsAccept, T epsAbort, bool pivo
 	if(m_sample != -1)
 	{
 	    this->m_result=this->m_basis->makeGeometry(give(convertBack(coefs).transpose())).release();
-	    m_L2Err.push_back(L2Error(*(this->m_result), m_sample));
+	    m_L2Err.push_back(L2Error(*(this->m_result), m_sample, T(1), 0, false));
 	}
 
 	switch(m_errType)
