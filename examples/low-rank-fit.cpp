@@ -1731,7 +1731,10 @@ void example_15(index_t deg,
     }
 
     gnuplot_15(maxErrs[0], maxErrs[1], maxErrs[2]);
-    gsWriteParaview(gsTensorBSpline<2>(basis, coefs), "result", 10000, false, true);
+    //gsWriteParaview(gsTensorBSpline<2>(basis, coefs), "result", 10000, false, true);
+    gsFileData<> fout;
+    fout << gsTensorBSpline<2>(basis, coefs);
+    fout.dump("result.xml");
 }
 
 void printMessage(index_t message)
