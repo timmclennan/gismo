@@ -582,7 +582,7 @@ void lowSVDFit(const gsMatrix<real_t>& params,
 	       index_t numKnots,
 	       index_t deg,
 	       index_t sample,
-	       index_t maxIter,
+	       index_t maxIter, // unused now
 	       const std::string& filename,
 	       real_t minU = 0.0,
 	       real_t maxU = 1.0)
@@ -592,7 +592,7 @@ void lowSVDFit(const gsMatrix<real_t>& params,
 
     gsInfo << "SVD fitting:\n";
     gsLowRankFitting<real_t> fitting(params, points, basis);
-    fitting.computeSVD(maxIter, sample, filename);
+    fitting.computeSVD(sample, filename);
 
     //gsWriteParaview(*fitting.result(), "low-rank", 10000, false, true);
 
@@ -1330,7 +1330,7 @@ void example_11(index_t sample, index_t deg, index_t numSamples, real_t epsAcc, 
 }
 
 void example_12(index_t sample, index_t deg, index_t numSamples, real_t epsAcc, real_t epsAbort,
-		bool pivot)
+		bool pivot, bool verbose)
 {
     real_t tMin, tMax;
     setDomain(sample, tMin, tMax);
@@ -1340,32 +1340,50 @@ void example_12(index_t sample, index_t deg, index_t numSamples, real_t epsAcc, 
     sampleData(numSamples, params, points, sample, tMin, tMax);
     std::vector<real_t> stdl2Err;
 
-    gsKnotVector<real_t> knots(tMin, tMax, 0, deg+1);
+    gsKnotVector<real_t> knots(tMin, tMax, 7, deg+1);
     gsTensorBSplineBasis<2, real_t> basis(knots, knots);
 
     std::vector<real_t> totDOF, stdCost, lowCost;
-    gsInfo << "pivoting: " << pivot << std::endl;
+
+    if(verbose)
+    {
+	gsInfo << "pivoting: " << pivot << std::endl;
+    }
+
     real_t zero = pivot ? 1e-12 : 4e-13;
     do
     {
+	gsInfo << "==========================================" << std::endl;
+	index_t numDOF = basis.size(0);
+	index_t numKnots = numDOF - deg - 1;
+
+	// Compute the error using standard method first.
+	gsStopwatch timeStd, timeApp;
+	timeStd.restart();
+	real_t std = stdFit(params, points, numKnots, deg, sample, tMin, tMax);
+	timeStd.stop();
+	stdl2Err.push_back(std);
+	stdCost.push_back(math::sqrt(params.cols()) + numDOF);
+
 	totDOF.push_back(basis.size());
 	gsLowRankFitting<real_t> lowRankFitting(params, points, basis, zero);
-	index_t message = lowRankFitting.computeCrossWithStop(epsAcc, epsAbort, pivot);
+	timeApp.restart();
+	//index_t message = lowRankFitting.computeCrossWithStop(1.01 * std, epsAbort, pivot, verbose);
+	index_t message = lowRankFitting.computeCrossWithStop(epsAcc, epsAbort, pivot, verbose);
+	timeApp.stop();
+
 	if(message == 0)
 	    gsInfo << "success";
 	else if(message == 1)
 	    gsInfo << "cannot converge";
 	else
 	    gsInfo << "max iter reached";
-	gsInfo << std::endl;
+	gsInfo << " in " << timeApp.elapsed() << "s." << std::endl;
+	gsInfo << "std: " << std  << " with " << numDOF << " DOF "
+	       << " in " << timeStd.elapsed() << "s." << std::endl;
 	lowCost.push_back(2 * lowRankFitting.getRank());
 
-	index_t numDOF = basis.size(0);
-	index_t numKnots = numDOF - deg - 1;
-	real_t std = stdFit(params, points, numKnots, deg, sample, tMin, tMax);
-	gsInfo << "std: " << std  << " with " << numDOF << " DOF" << std::endl;
-	stdl2Err.push_back(std);
-	stdCost.push_back(math::sqrt(params.cols()) + numDOF);
+
 
 	std::string filename("example-12-" + std::to_string(numDOF));
 	lowRankFitting.exportl2Err(filename + "-l2.dat");
@@ -1383,6 +1401,7 @@ void example_12(index_t sample, index_t deg, index_t numSamples, real_t epsAcc, 
     for(auto it=stdCost.begin(); it!=stdCost.end(); ++it)
 	stdTotCost += *it;
 
+    gsInfo << "==========================================" << std::endl;
     gsInfo << "total low cost: " << lowTotCost << ", total std cost: " << stdTotCost << std::endl;
 }
 
@@ -1461,8 +1480,8 @@ void gnuplot_13(const std::vector<index_t> numsDOF,
 	 << "}\n";
     fout << std::endl;
 
-    fout << "set xrange[0:30]\n"
-	 << "set yrange[1e-5:0.2]\n"
+    fout //<< "set xrange[0:30]\n"
+	 //<< "set yrange[1e-5:0.2]\n"
 	 << "set log y\n"
 	 << "set xlabel \"rank\"\n"
 	 << "set ylabel \"L2-error\"\n"
@@ -1486,7 +1505,8 @@ void gnuplot_13(const std::vector<index_t> numsDOF,
 	     << numsDOF[i] << "x" << numsDOF[i] << " DOF'";
 	if(i != size - 1)
 	    fout << ", \\" << std::endl << "     ";
-	fout << std::endl;
+	else
+	    fout << std::endl;
     }
     fout.close();
 }
@@ -1502,7 +1522,7 @@ void example_13(index_t sample, index_t deg, index_t numSamples, real_t epsAcc, 
     std::vector<std::vector<real_t>> errsL2Int, errsL2Gre;
     std::vector<std::string>         filenames;
 
-    for(index_t numDOF = 50; numDOF <= 400; numDOF *= 2)
+    for(index_t numDOF = 50; numDOF <= 100; numDOF *= 2)
     {
 	numsDOF.push_back(numDOF);
 
@@ -1517,7 +1537,8 @@ void example_13(index_t sample, index_t deg, index_t numSamples, real_t epsAcc, 
 	sampleDataGauss<real_t>(fittingBasis, paramsInt, pointsInt, uWeights, vWeights,
 				sample, quA, quB);
 	gsInfo << "Sampled " << paramsInt.cols() << " points, fitting with "
-	       << fittingBasis.size() << " DOF." << std::endl;
+	       << fittingBasis.size() << " DOF using the "
+	       << quA * deg + quB << "-point Gauss-Legendre quadrature rule." << std::endl;
 
 	// 3. Approximate in the least-squares sense.
 	gsLowRankFitting<real_t> fittingInt(paramsInt, pointsInt, uWeights, vWeights,
@@ -1748,9 +1769,9 @@ void printMessage(index_t message)
     gsInfo << std::endl;
 }
 
-void gnuplot_16(const std::string& what)
+void gnuplotMethodComparison(const std::string& exampleName, const std::string& what)
 {
-    const std::string filename("example-16-" + what + ".gnu");
+    const std::string filename(exampleName + "-" + what + ".gnu");
     size_t size = 3;
 
     std::ofstream fout;
@@ -1759,11 +1780,11 @@ void gnuplot_16(const std::string& what)
     gnuplotWriteLinestyles(fout, size);
     gnuplotWriteLabels(fout, "rank", "l2-error");
 
-    fout << "plot 'example-16-pivot-" << what << ".dat' index 0 with linespoints"
+    fout << "plot '" << exampleName << "-pivot-" << what << ".dat' index 0 with linespoints"
 	 << " linestyle 1 pointsize 0 title 'ACA with pivoting',\\\n"
-	 << "'example-16-full-"       << what << ".dat' index 0 with linespoints"
+	 <<      "'" << exampleName << "-full-"  << what << ".dat' index 0 with linespoints"
 	 << " linestyle 2 pointsize 0 title 'ACA without pivoting',\\\n"
-	 << "'example-16-svd-"        << what << ".dat' index 0 with linespoints"
+	 <<      "'" << exampleName << "-svd-"   << what << ".dat' index 0 with linespoints"
 	 << " linestyle 3 pointsize 0 title 'SVD'";
 
     fout.close();
@@ -1781,6 +1802,7 @@ void example_16(index_t sample, index_t deg, index_t numSamples, index_t numDOF,
     gsMatrix<real_t> params, points;
     sampleData(numSamples, params, points, sample, tMin, tMax);
     std::vector<real_t> stdl2Err, lowl2Err;
+    const std::string fileBasis("example-16");
 
     index_t numKnots = numDOF - deg - 1;
     gsKnotVector<real_t> knots(tMin, tMax, numKnots, deg+1);
@@ -1791,25 +1813,25 @@ void example_16(index_t sample, index_t deg, index_t numSamples, index_t numDOF,
     gsInfo << "Pivoting ACA\n";
     index_t message = lowRankFitting.computeCrossWithStop(epsAcc, epsAbort, true);
     printMessage(message);
-    lowRankFitting.exportl2Err(    "example-16-pivot-l2.dat");
-    lowRankFitting.exportDecompErr("example-16-pivot-decomp.dat");
+    lowRankFitting.exportl2Err(    fileBasis + "-pivot-l2.dat");
+    lowRankFitting.exportDecompErr(fileBasis + "-pivot-decomp.dat");
 
     gsInfo << "Full ACA\n";
     message = lowRankFitting.computeCrossWithStop(epsAcc, epsAbort, false);
     printMessage(message);
-    lowRankFitting.exportl2Err(    "example-16-full-l2.dat");
-    lowRankFitting.exportDecompErr("example-16-full-decomp.dat");
+    lowRankFitting.exportl2Err(    fileBasis + "-full-l2.dat");
+    lowRankFitting.exportDecompErr(fileBasis + "-full-decomp.dat");
 
     gsInfo << "SVD\n";
-    lowRankFitting.computeSVD(200, sample, "example-16");
-    lowRankFitting.exportl2Err(    "example-16-svd-l2.dat");
-    lowRankFitting.exportDecompErr("example-16-svd-decomp.dat");
+    lowRankFitting.computeSVD(sample, fileBasis);
+    lowRankFitting.exportl2Err(    fileBasis + "-svd-l2.dat");
+    lowRankFitting.exportDecompErr(fileBasis + "-svd-decomp.dat");
 
     real_t std = stdFit(params, points, numKnots, deg, sample, tMin, tMax);
     gsInfo << "std: " << std  << " with " << numDOF << " DOF" << std::endl;
 
-    gnuplot_16("l2");
-    gnuplot_16("decomp");
+    gnuplotMethodComparison(fileBasis, "l2");
+    gnuplotMethodComparison(fileBasis, "decomp");
 }
 
 int main(int argc, char *argv[])
@@ -1830,6 +1852,7 @@ int main(int argc, char *argv[])
     real_t quA = 1;
 
     bool pivot = false;
+    bool verbose = false;
 
     gsCmdLine cmd("Choose the example and its parameters.");
     cmd.addInt("m", "samples", "number of samples in each direction", numSamples);
@@ -1841,7 +1864,8 @@ int main(int argc, char *argv[])
     cmd.addReal("a", "abort", "epsilon abort for Algorithm 1", epsAbort);
     cmd.addReal("t", "tol", "epsilon accept for Algorithm 1", epsAcc);
     cmd.addReal("q", "quA", "quA in the quadrature rule", quA);
-    cmd.addSwitch("p", "piv", "whether to use pivoting in ACA", pivot);
+    cmd.addSwitch("p", "piv", "activate ACA pivoting", pivot);
+    cmd.addSwitch("v", "verbose", "write a lot of messages", verbose);
     cmd.addInt("b", "usamples", "number of samples in the u-direction", uNumSamples);
     cmd.addInt("c", "vsamples", "number of samples in the v-direction", vNumSamples);
     cmd.addInt("f", "udof", "number of DOF in the u-direction", uNumDOF);
@@ -1891,7 +1915,7 @@ int main(int argc, char *argv[])
 	example_11(sample, deg, numSamples, epsAcc, epsAbort);
 	break;
     case 12:
-	example_12(sample, deg, numSamples, epsAcc, epsAbort, pivot);
+	example_12(sample, deg, numSamples, epsAcc, epsAbort, pivot, verbose);
 	break;
     case 13:
 	example_13(sample, deg, numSamples, epsAcc, epsAbort, quA, quB);

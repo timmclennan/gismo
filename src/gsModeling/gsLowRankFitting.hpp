@@ -122,7 +122,7 @@ void gsLowRankFitting<T>::initPQ(const gsMatrix<T>& uWeights, const gsMatrix<T>&
 }
 
 template <class T>
-void gsLowRankFitting<T>::computeSVD(index_t maxIter, index_t sample, const std::string& filename)
+void gsLowRankFitting<T>::computeSVD(index_t sample, const std::string& filename)
 {
     clearErrors();
 
@@ -144,7 +144,7 @@ void gsLowRankFitting<T>::computeSVD(index_t maxIter, index_t sample, const std:
 
     // 2. Iterate.
     std::vector<T> LIErr, L2Err, l2Err, dofs;
-    for(index_t r=0; r<pointSVD.rank() && r<maxIter; r++)
+    for(index_t r=0; r<pointSVD.rank(); r++)
     {
 	// 2.0. Fit u with the u-basis.
 	gsFitting<T> uFitting(uPar, pointSVD.u(r).transpose(), uBasis);
@@ -221,104 +221,6 @@ void gsLowRankFitting<T>::computeCross(bool pivot,
     }
     //gsWriteParaview(*this->m_result, "result");
 }
-
-/*template <class T>
-void gsLowRankFitting<T>::computeCross_3(bool pivot,
-					 index_t maxIter,
-					 index_t sample)
-{
-    gsMatrix<T> coefs(this->m_basis->component(0).size(),
-		      this->m_basis->component(1).size());
-    coefs.setZero();
-
-    index_t uNum = math::sqrt(this->m_param_values.cols());
-    gsMatrix<T> ptsMN = convertToMN(uNum);
-    gsMatrix<T> ptsApprox(uNum, uNum);
-    ptsApprox.setZero();
-    std::set<index_t> usedI, usedJ;
-
-    gsMatrixCrossApproximation_3<T> crossApp(ptsMN);
-    T sigma;
-    gsVector<T> uVec, vVec;
-    T prevErr = 1e8;
-    bool scnm = true; // Stopping Criterium Not Met
-    gsMatrix<T> uMat(uNum, maxIter), vMat(uNum, maxIter), tMat(maxIter, maxIter);
-    tMat.setZero();
-    for(index_t i=0; i<maxIter && crossApp.nextIteration(sigma, uVec, vVec, pivot) && scnm; i++)
-    {
-	uMat.col(i) = uVec;
-	vMat.col(i) = vVec;
-	tMat(i, i)  = sigma;
-
-	//ptsApprox = ptsApprox + tMat(i, i) * uMat.col(i) * vMat.col(i).transpose();
-	//coefs = coefs + tMat(i, i) * (m_P * uMat.col(i) * (m_Q * vMat.col(i)).transpose());
-
-	gsMatrix<T> currPtsApprox = ptsApprox - uMat * tMat * vMat.transpose();
-	coefs = m_P * uMat * tMat * (m_Q * vMat).transpose();
-	
-	delete this->m_result;
-	this->m_result = this->m_basis->makeGeometry(give(convertBack(coefs).transpose())).release();
-	this->computeErrors();
-	T maxErr = this->maxPointError();
-	T l2Err = L2Error(*static_cast<gsTensorBSpline<2, T>*>(this->result()), sample);
-	gsInfo << "max err piv: " << maxErr << ", l2 err piv: " << l2Err << std::endl;
-
-	// Compute scnm.
-	index_t numChecks = 10;
-	T tol = 1.0e-6;
-	T maxEntry = 0; // AKA M_max
-	crossApp.getUsedI(usedI);
-	crossApp.getUsedJ(usedJ);
-	for(auto it=usedI.begin(); it!=usedI.end(); ++it)
-	    for(auto jt=usedJ.begin(); jt!=usedJ.end(); ++jt)
-		maxEntry = std::max(maxEntry, math::abs(ptsMN(*it, *jt)));
-
-	gsInfo << "maxEntry: " << maxEntry << std::endl;
-	bool errTooBig = false;
-
-	for(index_t ell = 1; ell < numChecks; ell++)
-	{
-	    std::random_device dev;
-	    std::mt19937 rng(dev());
-	    std::uniform_int_distribution<std::mt19937::result_type> dist(0, uNum - 1);
-
-	    index_t i_ell = dist(rng);
-	    while(usedI.find(i_ell) != usedI.end())
-		i_ell = dist(rng);
-
-	    index_t j_ell = dist(rng);
-	    while(usedJ.find(j_ell) != usedJ.end())
-		j_ell = dist(rng);
-
-	    if((math::abs(ptsMN(i_ell, j_ell) - ptsApprox(i_ell, j_ell)) / maxEntry) > tol)
-		errTooBig = true;
-	}
-	scnm = errTooBig;
-
-	if(!scnm)
-	    gsInfo << "Finishing at rank " << i+1 << "." << std::endl;
-	prevErr = l2Err;
-	m_maxErr.push_back(maxErr);
-	m_L2Err.push_back(l2Err);
-    }
-
-    for(int i=0; i<4; i++) // Refine; TODO: check tol.
-    {
-	this->m_basis->uniformRefine();
-	// Recompute P, Q (TODO: weights).
-	initPQ(matrixUtils::identity<T>(uNum),
-	       matrixUtils::identity<T>(uNum));
-	coefs = m_P * uMat * tMat * (m_Q * vMat).transpose();
-	delete this->m_result;
-	this->m_result = this->m_basis->makeGeometry(give(convertBack(coefs).transpose())).release();
-	this->computeErrors();
-	T maxErr = this->maxPointError();
-	T l2Err = L2Error(*static_cast<gsTensorBSpline<2, T>*>(this->result()), sample);
-	gsInfo << "(R) max err piv: " << maxErr << ", l2 err piv: " << l2Err << std::endl;
-	m_maxErr.push_back(maxErr);
-	m_L2Err.push_back(l2Err);
-    }
-    }*/
 
 template <class T>
 void gsLowRankFitting<T>::computeCross_3(bool pivot,
@@ -727,97 +629,6 @@ void gsLowRankFitting<T>::CR2I_new(const gsMatrix<T>& bott,
     gsWriteParaview(result, "result_new", 1000, false, true);
 }
 
-// template <class T>
-// T gsLowRankFitting<T>::L2error() const
-// {
-//     T result = 0;
-//     for(auto it=this->m_pointErrors.begin(); it!=this->m_pointErrors.end(); ++it)
-// 	result += (*it) * (*it);
-
-//     return math::sqrt(result);
-//     //return result;
-// }
-
-//template <class T>
-//void gsLowRankFitting<T>::updateCoefs(const gsMatrix<T>& uMat, const gsMatrix<T>& vMat
-
-/*template <class T>
-void gsLowRankFitting<T>::computeCrossWithRef(bool pivot,
-					      index_t maxIter,
-					      index_t sample)
-{
-    gsMatrix<T> coefs(this->m_basis->component(0).size(),
-		      this->m_basis->component(1).size());
-    coefs.setZero();
-
-    index_t uNum = math::sqrt(this->m_param_values.cols());
-    gsMatrix<T> ptsMN = convertToMN(uNum);
-
-    gsMatrixCrossApproximation<T> crossApp(ptsMN);
-    T sigma;
-    gsVector<T> uVec, vVec;
-    T prevErr = 1e8;
-    bool scnm = true; // Stopping Criterium Not Met
-
-    gsMatrix<T> uMat(uNum, maxIter);
-    gsMatrix<T> vMat(uNum, maxIter);
-    gsMatrix<T> TT(maxIter, maxIter);
-    TT.setZero();
-
-    for(index_t i=0; i<maxIter && crossApp.nextIteration(sigma, uVec, vVec, pivot) && scnm; i++)
-    {
-	uMat.col(i) = uVec;
-	vMat.col(i) = vVec;
-	TT(i, i) = sigma;
-
-	coefs = coefs + sigma * (m_P * uMat.col(i) * (m_Q * vMat.col(i)).transpose());
-	delete this->m_result;
-	this->m_result = this->m_basis->makeGeometry(give(convertBack(coefs).transpose())).release();
-	this->computeErrors();
-	T maxErr = this->maxPointError();
-	T l2Err = L2Error(*static_cast<gsTensorBSpline<2, T>*>(this->result()), sample);
-	gsInfo << "(L) max err piv: " << maxErr << ", l2 err piv: " << l2Err << std::endl;
-	scnm = (l2Err < prevErr);
-	gsWriteParaview(*this->result(), "justbefore", 10000, false, true);
-	if(!scnm)
-	{
-	    // Refine.
-	    gsInfo << "Refining at rank " << i+1 << std::endl;
-	    this->m_basis->uniformRefine(); // _withCoefs does not make it any better. (-;
-
-	    // Recompute P, Q (TODO: weights).
-	    initPQ(matrixUtils::identity<T>(uNum),
-		   matrixUtils::identity<T>(uNum));
-
-	    // Update coefs (matrix multiplication would be more efficient).
-	    coefs.setZero();
-	    for(index_t j=0; j<=i; j++)
-	    {
-	    	coefs = coefs + TT(j, j) * (m_P * uMat.col(j) * (m_Q * vMat.col(j)).transpose());
-
-		delete this->m_result;
-		this->m_result = this->m_basis->makeGeometry(give(convertBack(coefs).transpose())).release();
-		this->computeErrors();
-		T maxErr = this->maxPointError();
-		T l2Err = L2Error(*static_cast<gsTensorBSpline<2, T>*>(this->result()), sample);
-		gsInfo << "(R) max err piv: " << maxErr << ", l2 err piv: " << l2Err << std::endl;
-		gsWriteParaview(*this->result(), "fitting" + std::to_string(j), 10000, false, true);
-	    }
-
-	    prevErr = l2Err;
-	    scnm = true;
-	}
-	else
-	{
-	    // Continue
-	    prevErr = l2Err;
-	    m_maxErr.push_back(maxErr);
-	    m_L2Err.push_back(l2Err);
-	}
-    }
-    //gsWriteParaview(*this->m_result, "result");
-    }*/
-
 template <class T>
 void gsLowRankFitting<T>::computeCrossWithRef(bool pivot,
 					      index_t maxIter,
@@ -1012,7 +823,7 @@ void gsLowRankFitting<T>::computeCrossWithRefAndStop(T tol, bool pivot)
 }
 
 template <class T>
-int gsLowRankFitting<T>::computeCrossWithStop(T epsAccept, T epsAbort, bool pivot)
+int gsLowRankFitting<T>::computeCrossWithStop(T epsAccept, T epsAbort, bool pivot, bool verbose)
 {
     gsMatrix<T> coefs;
 
@@ -1020,11 +831,13 @@ int gsLowRankFitting<T>::computeCrossWithStop(T epsAccept, T epsAbort, bool pivo
     index_t vNum = this->m_param_values.cols() / uNum;
     gsMatrix<T> ptsMN = convertToMN(uNum);
     Eigen::ColPivHouseholderQR<gsMatrix<T>> qrDecomp(ptsMN);
-    gsInfo << "data rank: " << qrDecomp.rank() << std::endl;
+
+    if(verbose)
+	gsInfo << "data rank: " << qrDecomp.rank() << std::endl;
 
     gsMatrixCrossApproximation_3<T> crossApp(ptsMN, 0);
     gsVector<T> uVec, vVec;
-    T l2Err(1), maxErr(1), currErr(1), L2Err(-1);
+    T l2Err(1), maxErr(1), currErr(1), L2Err(-1), sigma;
 
     gsMatrix<T> uMat(uNum, 0);
     gsMatrix<T> vMat(vNum, 0);
@@ -1033,24 +846,25 @@ int gsLowRankFitting<T>::computeCrossWithStop(T epsAccept, T epsAbort, bool pivo
     gsMatrix<T> residua(uNum, vNum);
     residua.setZero();
 
-    crossApp.compute(pivot, uNum, m_zero);
-    gsMatrix<T> uTmp, vTmp, tTmp;
-    crossApp.getU(uTmp);
-    crossApp.getT(tTmp);
-    crossApp.getV(vTmp);
-
     // gsSvd<T> pointSVD(ptsMN);
     // gsInfo << "SVD rank: " << pointSVD.rank() << std::endl;
 
+    gsStopwatch time;
+    T sumTimes(0);
     clearErrors();
     index_t result = -1;
-    for(index_t i=0; i<tTmp.cols(); i++)
+    for(index_t i=0; i<uNum; i++)
     //for(index_t i=0; i<pointSVD.rank(); i++)
     {
+	time.restart();
+	crossApp.nextIteration(sigma, uVec, vVec, pivot, m_zero);
+	time.stop();
+	sumTimes += time.elapsed();
+
 	m_rank = i+1;
-	matrixUtils::appendCol<T>(uMat, uTmp.col(i));
-	matrixUtils::appendCol<T>(vMat, vTmp.col(i));
-	matrixUtils::appendDiag<T>(tMat, tTmp(i, i));
+	matrixUtils::appendCol<T>(uMat, uVec);
+	matrixUtils::appendCol<T>(vMat, vVec);
+	matrixUtils::appendDiag<T>(tMat, sigma);
 
 	// matrixUtils::appendCol<T>(uMat, pointSVD.u(i));
 	// matrixUtils::appendCol<T>(vMat, pointSVD.v(i));
@@ -1069,9 +883,12 @@ int gsLowRankFitting<T>::computeCrossWithStop(T epsAccept, T epsAbort, bool pivo
 	maxErr = std::max(math::abs(pointwiseErr.maxCoeff()),
 			  math::abs(pointwiseErr.minCoeff()));
 
-	// gsInfo << "iteration " << i << ", sqrt(DOF) " << coefs.rows() << ", ";
-	gsInfo << "l2 err: " << l2Err << ", rest: " << rest << ", diff: " << l2Err - rest
-	       << ", max err: " << maxErr << std::endl;
+	if(verbose)
+	{
+	    // gsInfo << "iteration " << i << ", sqrt(DOF) " << coefs.rows() << ", ";
+	    gsInfo << "l2 err: " << l2Err << ", rest: " << rest << ", diff: " << l2Err - rest
+		   << ", max err: " << maxErr << std::endl;
+	}
 
 	// Save the l2- and max-error ...
 	m_l2Err.push_back(l2Err);
@@ -1081,7 +898,7 @@ int gsLowRankFitting<T>::computeCrossWithStop(T epsAccept, T epsAbort, bool pivo
 	if(m_sample != -1)
 	{
 	    this->m_result=this->m_basis->makeGeometry(give(convertBack(coefs).transpose())).release();
-	    m_L2Err.push_back(L2Error(*(this->m_result), m_sample));
+	    m_L2Err.push_back(L2Error(*(this->m_result), m_sample, T(1), 0, false));
 	}
 
 	switch(m_errType)
@@ -1114,7 +931,7 @@ int gsLowRankFitting<T>::computeCrossWithStop(T epsAccept, T epsAbort, bool pivo
 	    result = 1; // cannot converge
 	    break;
 	}
-	else if(i == tTmp.cols() - 1)
+	else if(i == uNum - 1)
 	//else if(i == pointSVD.rank())
 	{
 	    gsInfo << "Max iter reached." << std::endl;
@@ -1126,6 +943,7 @@ int gsLowRankFitting<T>::computeCrossWithStop(T epsAccept, T epsAbort, bool pivo
     this->m_result = this->m_basis->makeGeometry(give(convertBack(coefs).transpose())).release();
     this->computeErrors();
     gsInfo << "l2E: " << l2Err << std::endl;
+    gsInfo << "Decomposition time: " << sumTimes << std::endl;
 
     return result;
 }

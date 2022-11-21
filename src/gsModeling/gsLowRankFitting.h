@@ -53,7 +53,7 @@ public:
 		     T zero = 1e-13,
 		     index_t sample = -1,
 		     gsErrType errType = gsErrType::l2)
-	: gsFitting<T>(params, points, basis), m_zero(zero), m_sample(sample), m_errType(errType)
+	: gsFitting<T>(params, points, basis), m_zero(zero), m_sample(sample), m_errType(errType), m_uNpts(uWeights.size())
     {
 	initPQ(matrixUtils::diag(uWeights),
 	       matrixUtils::diag(vWeights));
@@ -91,7 +91,7 @@ public:
 
     void computeCross_3(bool pivot, index_t maxIter, index_t sample);
     
-    void computeSVD(index_t maxIter, index_t sample, const std::string& filename);
+    void computeSVD(index_t sample, const std::string& filename);
 
     void computeRes();
 
@@ -110,7 +110,7 @@ public:
 
     void computeCrossWithRefAndStop(T tol, bool pivot);
 
-    int computeCrossWithStop(T epsAccept, T epsAbort, bool pivot = true);
+    int computeCrossWithStop(T epsAccept, T epsAbort, bool pivot = true, bool verbose = true);
 
     T methodB(bool printErr);
 

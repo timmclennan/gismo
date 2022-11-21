@@ -95,6 +95,8 @@ namespace gismo
 	gsMatrix<T> values;
 	T result = 0;
 
+	gsInfo << "Computing L2 error with a " << spline.degree(0)*quA + quB << "-point rule." << std::endl;
+
 	for (auto domIt = spline.basis().makeDomainIterator(); domIt->good(); domIt->next() )
 	{
 	    if(verbose)
