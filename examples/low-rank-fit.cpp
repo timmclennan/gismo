@@ -1692,6 +1692,27 @@ void gnuplot_15(std::vector<real_t> xErr,
     gsWriteGnuplot(err, "example-15.dat");	
 }
 
+void gnuplotMethodComparison(const std::string& exampleName, const std::string& what)
+{
+    const std::string filename(exampleName + "-" + what + ".gnu");
+    size_t size = 3;
+
+    std::ofstream fout;
+    fout.open(filename);
+    gnuplotWriteColourArray(fout, size);
+    gnuplotWriteLinestyles(fout, size);
+    gnuplotWriteLabels(fout, "rank", what + "-error");
+
+    fout << "plot '" << exampleName << "-pivot-" << what << ".dat' index 0 with linespoints"
+	 << " linestyle 1 pointsize 0 title 'ACA with pivoting',\\\n"
+	 <<      "'" << exampleName << "-full-"  << what << ".dat' index 0 with linespoints"
+	 << " linestyle 2 pointsize 0 title 'ACA without pivoting',\\\n"
+	 <<      "'" << exampleName << "-svd-"   << what << ".dat' index 0 with linespoints"
+	 << " linestyle 3 pointsize 0 title 'SVD'";
+
+    fout.close();
+}
+
 /**
    \a sample has different meaning in this example:
    0 -> sample points from tmtf-one-surf.xml uniformly;
@@ -1703,11 +1724,16 @@ void gnuplot_15(std::vector<real_t> xErr,
    (v0, ..., v0, v1, ..., v1, ..., vn, ..., vn),
    otherwise partitioning into parameters is likely to lead to strange behaviour.
  */
-void example_15(index_t deg,
-		index_t uNumSamples, index_t vNumSamples,
-		index_t uNumDOF, index_t vNumDOF,
-		real_t epsAcc, real_t epsAbort, bool pivot, index_t sample)
+void example_15()
 {
+    // Settings from the paper.
+    index_t deg = 3;
+    index_t uNumSamples = 41;
+    index_t uNumDOF = 40;
+    index_t vNumDOF = 128;
+    real_t epsAcc = 5e-5;
+    real_t epsAbort = 100;
+
     index_t uNumKnots = uNumDOF - deg - 1;
     index_t vNumKnots = vNumDOF - deg - 1;
     real_t uMin(0.0), uMax(1.0), vMin(0.0), vMax(1.0);
@@ -1716,46 +1742,56 @@ void example_15(index_t deg,
     real_t zero = 1e-13;
 
     gsMatrix<real_t> params, points;
-
-    if(sample == 0 || sample == 1)
-    {
-	gsFileData<> fd1("crescendo/tmtf-one-surf.xml");
-	gsTensorBSpline<2>::uPtr spline = fd1.getFirst<gsTensorBSpline<2>>();
-	if(sample == 0)
-	    sampleDataUniform<real_t>(*spline, uNumSamples, vNumSamples, params, points);
-	else
-	    sampleDataGre<real_t>(uNumSamples, vNumSamples, params, points, *spline);
-    }
-    else
-    {
-	gsFileData<> fd2("crescendo/tmtf-input.xml");
-	fd2.getId<gsMatrix<>>(0, params);
-	fd2.getId<gsMatrix<>>(1, points);
-    }
+    gsFileData<> fd2("crescendo/tmtf-input.xml");
+    fd2.getId<gsMatrix<>>(0, params);
+    fd2.getId<gsMatrix<>>(1, points);
     
     std::vector<std::vector<real_t>> maxErrs;
 
     gsKnotVector<real_t> uKnots(uMin, uMax, uNumKnots, deg+1);
     gsKnotVector<real_t> vKnots(vMin, vMax, vNumKnots, deg+1);
     gsTensorBSplineBasis<2, real_t> basis(uKnots, vKnots);
-    gsMatrix<real_t> coefs(basis.size(), 3);
+    gsMatrix<real_t> coefs(basis.size(), 3), stdCoefs(basis.size(), 3);
     for(index_t i=0; i<3; i++)
     {
 	gsLowRankFitting<real_t> lowRankFitting(params, points.row(i), basis, zero, dummy, errType, uNumSamples);
-	lowRankFitting.computeCrossWithStop(epsAcc, epsAbort, pivot);
+	lowRankFitting.computeCrossWithStop(epsAcc, epsAbort, true);
 	coefs.col(i) = lowRankFitting.result()->coefs();
 	maxErrs.push_back(lowRankFitting.getMaxErr());
 
-	gsInfo << "std: "
-	       << stdFit(params, points.row(i), uNumKnots, vNumKnots, deg, dummy, uMin, uMax, vMin, vMax)
-	       << std::endl;
+	gsFitting<real_t> stdFitting(params, points, basis);
+	stdFitting.compute();
+	stdFitting.computeErrors();
+	stdCoefs.col(i) = stdFitting.result()->coefs();
+	//gsInfo << "std: " << stdFitting.get_Error() << std::endl;
+
+	if(i==0)
+	{
+	    const std::string fileBasis("example-15-x");
+	    lowRankFitting.exportMaxErr(   fileBasis + "-pivot-max.dat");
+	    lowRankFitting.exportDecompErr(fileBasis + "-pivot-decomp.dat");
+
+	    lowRankFitting.computeCrossWithStop(epsAcc, epsAbort, false);
+	    lowRankFitting.exportMaxErr(   fileBasis + "-full-max.dat");
+	    lowRankFitting.exportDecompErr(fileBasis + "-full-decomp.dat");
+
+	    lowRankFitting.computeSVD(0,   fileBasis);
+	    lowRankFitting.exportMaxErr(   fileBasis + "-svd-max.dat");
+	    lowRankFitting.exportDecompErr(fileBasis + "-svd-decomp.dat");
+
+	    gnuplotMethodComparison(fileBasis, "max");
+	    gnuplotMethodComparison(fileBasis, "decomp");
+	}
     }
 
-    gnuplot_15(maxErrs[0], maxErrs[1], maxErrs[2]);
-    //gsWriteParaview(gsTensorBSpline<2>(basis, coefs), "result", 10000, false, true);
-    gsFileData<> fout;
-    fout << gsTensorBSpline<2>(basis, coefs);
-    fout.dump("result.xml");
+    //gnuplot_15(maxErrs[0], maxErrs[1], maxErrs[2]);
+    gsFileData<> lowRankFd;
+    lowRankFd << gsTensorBSpline<2>(basis, coefs);
+    lowRankFd.dump("result-low-rank.xml");
+
+    gsFileData<> stdFd;
+    stdFd << gsTensorBSpline<2>(basis, coefs);
+    stdFd.dump("result-std.xml");
 }
 
 void printMessage(index_t message)
@@ -1767,27 +1803,6 @@ void printMessage(index_t message)
     else
 	gsInfo << "max iter reached";
     gsInfo << std::endl;
-}
-
-void gnuplotMethodComparison(const std::string& exampleName, const std::string& what)
-{
-    const std::string filename(exampleName + "-" + what + ".gnu");
-    size_t size = 3;
-
-    std::ofstream fout;
-    fout.open(filename);
-    gnuplotWriteColourArray(fout, size);
-    gnuplotWriteLinestyles(fout, size);
-    gnuplotWriteLabels(fout, "rank", "l2-error");
-
-    fout << "plot '" << exampleName << "-pivot-" << what << ".dat' index 0 with linespoints"
-	 << " linestyle 1 pointsize 0 title 'ACA with pivoting',\\\n"
-	 <<      "'" << exampleName << "-full-"  << what << ".dat' index 0 with linespoints"
-	 << " linestyle 2 pointsize 0 title 'ACA without pivoting',\\\n"
-	 <<      "'" << exampleName << "-svd-"   << what << ".dat' index 0 with linespoints"
-	 << " linestyle 3 pointsize 0 title 'SVD'";
-
-    fout.close();
 }
 
 /**
@@ -1924,7 +1939,7 @@ int main(int argc, char *argv[])
 	example_14(sample, deg, numSamples, epsAcc, epsAbort);
 	break;
     case 15:
-	example_15(deg, uNumSamples, vNumSamples, uNumDOF, vNumDOF, epsAcc, epsAbort, pivot, sample);
+	example_15();
 	break;
     case 16:
 	example_16(sample, deg, numSamples, numDOF, epsAcc, epsAbort);
