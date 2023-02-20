@@ -465,7 +465,6 @@ T gsLowRankFitting<T>::methodC(bool printErr, index_t maxIter)
     gsInfo << "factorization: " << timef.elapsed() << std::endl;
 
     // Using the original version instead of _3 seems a bit faster.
-    timec.restart();
     // crossApp.compute(true, maxIter);
     // gsMatrix<T> uMat, vMat, tMat;
     // crossApp.getU(uMat);
@@ -475,14 +474,30 @@ T gsLowRankFitting<T>::methodC(bool printErr, index_t maxIter)
     gsVector<T> uVec, vVec;
     T sigma;
     tMat.setZero();
-    for(index_t i=0; i<maxIter && crossApp.nextIteration(sigma, uVec, vVec, true); i++)
+
+    std::vector<gsVector<T>> uVecs(maxIter), vVecs(maxIter);
+    std::vector<T> sigmas(maxIter);
+
+    timec.restart();
+    for(index_t i=0; i<maxIter && crossApp.nextIteration(sigmas[i], uVecs[i], vVecs[i], true); i++)
     {
-	uMat.col(i) = uVec;
-	vMat.col(i) = vVec;
-	tMat(i, i)  = sigma;
+	// uMat.col(i) = uVec;
+	// vMat.col(i) = vVec;
+	// tMat(i, i)  = sigma;
+
+	// uVecs[i] = uVec;
+	// vVecs[i] = vVec;
+	// sigmas[i] = sigma;
     }
     timec.stop();
     gsInfo << "cross approximation: " << timec.elapsed() << std::endl;
+
+    for(index_t i=0; i<maxIter; i++)
+    {
+	uMat.col(i) = uVecs[i];
+	vMat.col(i) = vVecs[i];
+	tMat(i, i) = sigmas[i];
+    }
 
     // Saving the matrices beforehand leads to a speed up of an order of magnitude.
     gsMatrix<T> rhs1 = Xs.transpose() * uMat;
@@ -882,12 +897,15 @@ int gsLowRankFitting<T>::computeCrossWithStop(T epsAccept, T epsAbort, bool pivo
 	l2Err = pointwiseErr.norm();
 	maxErr = std::max(math::abs(pointwiseErr.maxCoeff()),
 			  math::abs(pointwiseErr.minCoeff()));
+	T eps_j = (zMat - values).norm();
 
 	if(verbose)
 	{
 	    // gsInfo << "iteration " << i << ", sqrt(DOF) " << coefs.rows() << ", ";
-	    gsInfo << "l2 err: " << l2Err << ", rest: " << rest << ", diff: " << l2Err - rest
-		   << ", max err: " << maxErr << std::endl;
+	    gsInfo << "l2 err: "  << l2Err
+		   << ", rest: "  << rest
+		   << ", eps_j: " << eps_j
+		   << ", est: "   << eps_j - rest << std::endl;
 	}
 
 	// Save the l2- and max-error ...
@@ -925,7 +943,7 @@ int gsLowRankFitting<T>::computeCrossWithStop(T epsAccept, T epsAbort, bool pivo
 	    break;
 	}
 	//else if(l2Err - rest > 0.9 * l2Err) // Seems to work decently!
-	else if(currErr - rest > epsAbort)
+	else if(eps_j - rest > epsAbort)
 	{
 	    gsInfo << "Aborting after iteration " << i+1 << std::endl;
 	    result = 1; // cannot converge

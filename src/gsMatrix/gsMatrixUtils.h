@@ -42,7 +42,7 @@ namespace gismo
 	    // 	    result(i, j) += sigma * u(i) * v(j);
 
 	    // The following seems to be quite a bit faster than my for-loops.
-	    result += sigma * u * v.transpose();
+	    result += (sigma * u) * v.transpose();
 	    //result = result + sigma * u * v.transpose();
 
 	    // for(index_t i=0; i<result.rows(); i++)

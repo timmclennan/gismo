@@ -138,7 +138,7 @@ protected:
 	if(shifts > m_mat.rows())
 	{
 	    // Prevent a possible infinite loop.
-	    gsInfo << "shifting too much" << std::endl;
+	    //gsInfo << "shifting too much" << std::endl;
 	    return false;
 	}
 
