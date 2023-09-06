@@ -152,6 +152,19 @@ TEMPLATE_INST
 void writeSingleHBox(gsHBox<2,T> & box, std::string const & fn);
 
 
+#ifdef GISMO_WITH_PYBIND11
+
+namespace py = pybind11;
+void pybind11_init_gsWriteParaview(py::module& m) {
+
+    m
+        .def("gsWriteParaview", static_cast<void (*)(const gsGeometry<T>&, std::string const&, unsigned, bool, bool)>(&gsWriteParaview))
+        .def("gsWriteParaview", static_cast<void (*)(const gsBasis<T>&, std::string const&, unsigned, bool)>(&gsWriteParaview))
+    ;
+}
+#endif // GISMO_WITH_PYBIND11
+
+
 } // namespace gismo
 
 #undef T

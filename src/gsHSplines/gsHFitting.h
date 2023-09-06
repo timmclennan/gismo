@@ -15,7 +15,7 @@
 
 #include <gsModeling/gsFitting.h>
 #include <gsHSplines/gsHTensorBasis.h>
-
+#include <gsHSplines/gsTHBSplineBasis.h>
 namespace gismo {
 
 /**
@@ -390,6 +390,12 @@ T gsHFitting<d, T>::setRefineThreshold(const std::vector<T>& errors )
     return *pos;
 }
 
+#ifdef GISMO_WITH_PYBIND11
+
+GISMO_EXPORT
+void pybind11_init_gsHFitting2(py::module& m);
+
+#endif // GISMO_WITH_PYBIND11
 
 }// namespace gismo
 

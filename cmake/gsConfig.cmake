@@ -180,8 +180,8 @@ if (MINGW)
   set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--export-all-symbols")
 
   # large files can overflow pe/coff sections, so use the pe+ format
-  CHECK_CXX_COMPILER_FLAG("-Wa,-mbig-obj" HAS_MBIGOBJ)
-  if(NOT HAS_MBIGOBJ)
+  #CHECK_CXX_COMPILER_FLAG("-Wa,-mbig-obj" HAS_MBIGOBJ)
+  if("") #NOT HAS_MBIGOBJ)
     message(WARNING "Current compiler does not suppport -Wa,-mbig-obj option.")
   else()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wa,-mbig-obj")

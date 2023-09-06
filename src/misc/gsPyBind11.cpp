@@ -14,6 +14,9 @@
 #include <gsCore/gsConfig.h>
 #include <gsCore/gsExport.h>
 
+#ifndef NO_HSPLINES_MODULE_FILE
+#include <gsHSplines/py_gsHSplines.h>
+#endif
 #include <gismo.h>
 
 #ifdef gsKLShell_ENABLED
@@ -25,8 +28,8 @@
 
 namespace gismo {
 
-void pybind11_init_PPN(pybind11::module &m);
-
+GISMO_EXPORT void pybind11_init_PPN(pybind11::module &m);
+//GISMO_EXPORT void pybind11_init_HFitting2(pybind11::module& m);
 }
 
 namespace py = pybind11;
@@ -66,6 +69,8 @@ PYBIND11_MODULE(pygismo, m) {
   gismo::pybind11_init_gsMultiPatch( core );
   gismo::pybind11_init_gsMultiBasis( core );
 
+
+#ifdef NO_HSPLINES_MODULE_FILE
   py::module hsplines = m.def_submodule("hsplines");
 
   hsplines.attr("__name__") = "pygismo.hsplines";
@@ -84,7 +89,11 @@ PYBIND11_MODULE(pygismo, m) {
   gismo::pybind11_init_gsTHBSpline2( hsplines );
   gismo::pybind11_init_gsTHBSpline3( hsplines );
   gismo::pybind11_init_gsTHBSpline4( hsplines );
-  
+  gismo::pybind11_init_gsHFitting2(hsplines);
+#else
+  pybind11_init_gsHsplines(m);
+#endif
+
   py::module io = m.def_submodule("io");
 
   io.attr("__name__") = "pygismo.io";
@@ -95,7 +104,7 @@ PYBIND11_MODULE(pygismo, m) {
   gismo::pybind11_init_gsFileData( io );
   gismo::pybind11_init_gsReadFile( io );
   gismo::pybind11_init_gsOptionList (io );  
-
+  gismo::pybind11_init_gsWriteParaview(io);
   py::module matrix = m.def_submodule("matrix");
 
   matrix.attr("__name__") = "pygismo.matrix";
@@ -120,9 +129,9 @@ PYBIND11_MODULE(pygismo, m) {
 
   py::module msplines = m.def_submodule("msplines");
 
-  hsplines.attr("__name__") = "pygismo.msplines";
-  hsplines.attr("__version__") = GISMO_VERSION;
-  hsplines.doc() = "G+Smo (Geometry + Simulation Modules): MSplines module";
+  msplines.attr("__name__") = "pygismo.msplines";
+  msplines.attr("__version__") = GISMO_VERSION;
+  msplines.doc() = "G+Smo (Geometry + Simulation Modules): MSplines module";
 
   // gismo::pybind11_init_gsMappedSpline( msplines );
   // gismo::pybind11_init_gsMappedBasis1( msplines );

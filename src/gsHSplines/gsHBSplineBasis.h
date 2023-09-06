@@ -136,9 +136,9 @@ private:
   /**
    * @brief Initializes the Python wrapper for the class: gsHBSplineBasis
    */
-  void pybind11_init_gsHBSplineBasis2(pybind11::module &m);
-  void pybind11_init_gsHBSplineBasis3(pybind11::module &m);
-  void pybind11_init_gsHBSplineBasis4(pybind11::module &m);
+ GISMO_EXPORT void pybind11_init_gsHBSplineBasis2(pybind11::module &m);
+ GISMO_EXPORT void pybind11_init_gsHBSplineBasis3(pybind11::module &m);
+ GISMO_EXPORT void pybind11_init_gsHBSplineBasis4(pybind11::module &m);
 
 #endif // GISMO_WITH_PYBIND11
 
